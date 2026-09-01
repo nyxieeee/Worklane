@@ -1,0 +1,263 @@
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Bell, Users, Mail, Search, LogOut, Shield, ChevronRight, Settings } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useWorkStore } from '../store/useWorkStore';
+import { useNotifStore } from '../store/useNotifStore';
+import { useAuthStore } from '../store/useAuthStore';
+import { avatarInitials } from '../utils';
+import type { Member } from '../types';
+
+interface Props {
+  page?: 'dashboard' | 'board';
+  title?: string;
+  onOpenSearch: () => void;
+  onManageMembers?: () => void;
+  onManageEmail?: () => void;
+  onOpenPrivacy: () => void;
+  onOpenSettings?: (tab?: 'appearance' | 'notifications' | 'email' | 'privacy' | 'labels') => void;
+  onToggleNotif: () => void;
+  notifOpen: boolean;
+}
+
+export default function Topbar({
+  page = 'board',
+  title,
+  onOpenSearch,
+  onManageMembers,
+  onManageEmail,
+  onOpenPrivacy,
+  onOpenSettings,
+  onToggleNotif,
+  notifOpen
+}: Props) {
+  const boards            = useWorkStore(s => s.boards);
+  const activeBoard       = useWorkStore(s => s.getActiveBoard());
+  const board             = page === 'dashboard' ? null : activeBoard;
+  const rawNotifications  = useNotifStore(s => s.notifications);
+  const user              = useAuthStore(s => s.user);
+  const logout            = useAuthStore(s => s.logout);
+
+  const notifications = useMemo(() => {
+    if (!user?.email) return rawNotifications.filter(n => !n.recipientEmail);
+    const email = user.email.toLowerCase().trim();
+    return rawNotifications.filter(n => !n.recipientEmail || n.recipientEmail === email);
+  }, [rawNotifications, user?.email]);
+
+  const [userDropOpen, setUserDropOpen] = useState(false);
+  const chipRef = useRef<HTMLDivElement>(null);
+
+  // If on dashboard, aggregate distinct members across all boards
+  const members: Member[] = useMemo(() => {
+    if (board) return board.members || [];
+    const map = new Map<string, Member>();
+    boards.forEach(b => {
+      (b.members || []).forEach(m => {
+        if (!map.has(m.id || m.name)) map.set(m.id || m.name, m);
+      });
+    });
+    return Array.from(map.values());
+  }, [board, boards]);
+
+  const shown   = members.slice(0, 3);
+  const extra   = members.length > 3 ? members.length - 3 : 0;
+
+  // Close user dropdown on outside click
+  useEffect(() => {
+    if (!userDropOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!chipRef.current?.contains(e.target as Node)) setUserDropOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [userDropOpen]);
+
+  return (
+    <header className="topbar">
+      {/* Breadcrumb */}
+      <div className="topbar-left">
+        <div className="topbar-breadcrumbs">
+          <span className="topbar-crumb-root">Workspace</span>
+          <ChevronRight size={13} className="topbar-crumb-sep" />
+          <span className="topbar-crumb-active">
+            {title || (page === 'dashboard' ? 'Overview' : (board ? board.name : 'Overview'))}
+          </span>
+        </div>
+      </div>
+
+      {/* Right Tools */}
+      <div className="topbar-right">
+        {/* Search trigger */}
+        <motion.button
+          whileTap={{ scale: 0.96 }}
+          className="topbar-search-trigger"
+          onClick={onOpenSearch}
+          title="Search Tasks"
+        >
+          <Search size={14} />
+          <span>Search tasks...</span>
+          <kbd className="topbar-shortcut-pill">⌘K</kbd>
+        </motion.button>
+
+        {/* Member avatar stack (Board context only) */}
+        {page === 'board' && board && members.length > 0 && (
+          <div
+            className="card-assignees"
+            onClick={onManageMembers}
+            title="Manage Team Members"
+            style={{ cursor: 'pointer', paddingRight: 4 }}
+          >
+            {shown.map(m => (
+              m.avatarUrl ? (
+                <img
+                  key={m.id}
+                  src={m.avatarUrl}
+                  alt={m.name}
+                  className="card-avatar"
+                  title={m.name}
+                />
+              ) : (
+                <div
+                  key={m.id}
+                  className="card-avatar"
+                  style={{ backgroundColor: m.color }}
+                  title={m.name}
+                >
+                  {avatarInitials(m.name)}
+                </div>
+              )
+            ))}
+            {extra > 0 && (
+              <div className="card-avatar" style={{ backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
+                +{extra}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Action icons (Board context only) */}
+        {page === 'board' && onManageMembers && (
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            className="icon-btn"
+            title="Team Members"
+            onClick={onManageMembers}
+          >
+            <Users size={15} />
+          </motion.button>
+        )}
+
+        {page === 'board' && onManageEmail && (
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            className="icon-btn"
+            title="Email Updates"
+            onClick={onManageEmail}
+          >
+            <Mail size={15} />
+          </motion.button>
+        )}
+
+        {/* Bell Notifications */}
+        <div style={{ position: 'relative' }}>
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            className={`icon-btn ${notifOpen ? 'active' : ''}`}
+            onClick={onToggleNotif}
+            title="Notifications"
+          >
+            <Bell size={15} />
+            {notifications.length > 0 && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  backgroundColor: 'hsl(var(--primary))'
+                }}
+              />
+            )}
+          </motion.button>
+        </div>
+
+        {/* User Account Menu */}
+        <div style={{ position: 'relative' }} ref={chipRef}>
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            className="icon-btn"
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: '50%',
+              backgroundColor: 'hsl(var(--primary))',
+              color: 'hsl(var(--primary-foreground))',
+              fontSize: 11,
+              fontWeight: 700
+            }}
+            onClick={() => setUserDropOpen(o => !o)}
+            title="User Profile"
+          >
+            {avatarInitials(user?.name || 'U')}
+          </motion.button>
+
+          <AnimatePresence>
+            {userDropOpen && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -6 }}
+                transition={{ duration: 0.12 }}
+                style={{
+                  position: 'absolute',
+                  top: 38,
+                  right: 0,
+                  width: 180,
+                  backgroundColor: 'hsl(var(--popover))',
+                  borderRadius: 'var(--radius)',
+                  boxShadow: 'var(--neu-shadow-floating)',
+                  padding: '6px',
+                  zIndex: 50,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4
+                }}
+              >
+                <div style={{ padding: '6px 8px', borderBottom: '1px solid hsl(var(--border) / 0.5)', marginBottom: 2 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'hsl(var(--foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {user?.name || 'User'}
+                  </div>
+                  {user?.email && (
+                    <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user.email}
+                    </div>
+                  )}
+                </div>
+
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  className="sidebar-nav-item"
+                  style={{ width: '100%', fontSize: 12.5 }}
+                  onClick={() => { onOpenPrivacy(); setUserDropOpen(false); }}
+                >
+                  <Shield size={13} />
+                  <span>Privacy & Data</span>
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  className="sidebar-nav-item"
+                  style={{ width: '100%', fontSize: 12.5, color: 'hsl(var(--destructive))' }}
+                  onClick={() => { logout(); setUserDropOpen(false); }}
+                >
+                  <LogOut size={13} />
+                  <span>Sign Out</span>
+                </motion.button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </header>
+  );
+}

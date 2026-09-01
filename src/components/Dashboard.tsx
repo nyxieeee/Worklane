@@ -309,163 +309,165 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                   const memberCount = board.members?.length ?? 0;
 
                   return (
-                    <Tilt3D key={board.id} maxTilt={10} scale={1.02}>
-                      <div
-                        className="dashboard-board-card"
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => onSelectBoard(board.id)}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div
-                              style={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                backgroundColor: board.color,
-                                boxShadow: 'var(--neu-shadow-raised-sm)'
-                              }}
-                            />
-                            <span style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--foreground))' }}>
-                              {board.name}
-                            </span>
-                          </div>
+                    <motion.div
+                      key={board.id}
+                      whileHover={{ scale: 1.02, y: -2 }}
+                      whileTap={{ scale: 0.98 }}
+                      transition={{ duration: 0.15 }}
+                      className="dashboard-board-card"
+                      style={{ cursor: 'pointer', position: 'relative' }}
+                      onClick={() => onSelectBoard(board.id)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div
-                            style={{ display: 'flex', alignItems: 'center', gap: 4, position: 'relative', zIndex: 10 }}
-                            onClick={e => e.stopPropagation()}
-                            onMouseDown={e => e.stopPropagation()}
-                          >
-                            {!board.createdBy || (user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) ? (
-                              <button
-                                type="button"
-                                className="icon-btn"
-                                style={{ width: 26, height: 26, color: 'hsl(var(--destructive))', cursor: 'pointer' }}
-                                title="Delete board"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  if (window.confirm(`Delete board "${board.name}" and all its tasks?`)) {
-                                    deleteBoard(board.id);
-                                    showToast(`Deleted board "${board.name}"`, 'info');
-                                  }
-                                }}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="icon-btn"
-                                style={{ width: 26, height: 26, color: 'hsl(var(--destructive))', cursor: 'pointer' }}
-                                title="Leave board"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault();
-                                  if (user?.email && window.confirm(`Leave board "${board.name}"?`)) {
-                                    leaveBoard(board.id, user.email);
-                                    showToast(`You left "${board.name}"`, 'info');
-                                  }
-                                }}
-                              >
-                                <LogOut size={13} />
-                              </button>
-                            )}
-                            <button
+                            style={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              backgroundColor: board.color,
+                              boxShadow: 'var(--neu-shadow-raised-sm)'
+                            }}
+                          />
+                          <span style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--foreground))' }}>
+                            {board.name}
+                          </span>
+                        </div>
+                        <div
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative', zIndex: 20 }}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          {!board.createdBy || (user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) ? (
+                            <motion.button
                               type="button"
+                              whileTap={{ scale: 0.88 }}
                               className="icon-btn"
-                              style={{ width: 26, height: 26, cursor: 'pointer' }}
-                              title="Open board"
+                              style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, color: 'hsl(var(--destructive))', cursor: 'pointer' }}
+                              title="Delete board"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onSelectBoard(board.id);
+                                if (window.confirm(`Delete board "${board.name}" and all its tasks?`)) {
+                                  deleteBoard(board.id);
+                                  showToast(`Deleted board "${board.name}"`, 'info');
+                                }
                               }}
                             >
-                              <ArrowUpRight size={14} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 'auto' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11.5, color: 'hsl(var(--muted-foreground))' }}>
-                            <span>{doneCards}/{totalCards} tasks done</span>
-                            <span style={{ fontWeight: 700, color: 'hsl(var(--foreground))' }}>{progress}%</span>
-                          </div>
-
-                          <div style={{ width: '100%', height: 6, borderRadius: 9999, backgroundColor: 'hsl(var(--card))', boxShadow: 'var(--neu-shadow-input)', overflow: 'hidden' }}>
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${progress}%` }}
-                              transition={{ duration: 0.5, ease: 'easeOut' }}
-                              style={{
-                                height: '100%',
-                                backgroundColor: board.color,
-                                borderRadius: 9999
+                              <Trash2 size={13} />
+                            </motion.button>
+                          ) : (
+                            <motion.button
+                              type="button"
+                              whileTap={{ scale: 0.88 }}
+                              className="icon-btn"
+                              style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, color: 'hsl(var(--destructive))', cursor: 'pointer' }}
+                              title="Leave board"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (user?.email && window.confirm(`Leave board "${board.name}"?`)) {
+                                  leaveBoard(board.id, user.email);
+                                  showToast(`You left "${board.name}"`, 'info');
+                                }
                               }}
-                            />
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'hsl(var(--muted-foreground))', paddingTop: 6 }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <KanbanSquare size={12} /> {board.columns?.length ?? 0} columns
-                            </span>
-
-                            {/* Member Avatars */}
-                            {memberCount > 0 && (
-                              <div style={{ display: 'flex', alignItems: 'center' }}>
-                                {board.members.slice(0, 3).map((m, idx) => (
-                                  <div
-                                    key={m.id}
-                                    style={{
-                                      width: 20,
-                                      height: 20,
-                                      borderRadius: '50%',
-                                      backgroundColor: m.color,
-                                      color: '#fff',
-                                      fontSize: 8.5,
-                                      fontWeight: 700,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      marginLeft: idx === 0 ? 0 : -6,
-                                      border: '2px solid hsl(var(--card))',
-                                      boxShadow: 'var(--neu-shadow-raised-sm)',
-                                      overflow: 'hidden'
-                                    }}
-                                    title={m.name}
-                                  >
-                                    {m.avatarUrl ? (
-                                      <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    ) : (
-                                      avatarInitials(m.name)
-                                    )}
-                                  </div>
-                                ))}
-                                {memberCount > 3 && (
-                                  <div
-                                    style={{
-                                      width: 20,
-                                      height: 20,
-                                      borderRadius: '50%',
-                                      backgroundColor: 'hsl(var(--secondary))',
-                                      color: 'hsl(var(--secondary-foreground))',
-                                      fontSize: 8,
-                                      fontWeight: 700,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      marginLeft: -6,
-                                      border: '2px solid hsl(var(--card))'
-                                    }}
-                                  >
-                                    +{memberCount - 3}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                            >
+                              <LogOut size={13} />
+                            </motion.button>
+                          )}
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.88 }}
+                            className="icon-btn"
+                            style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, cursor: 'pointer' }}
+                            title="Open board"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectBoard(board.id);
+                            }}
+                          >
+                            <ArrowUpRight size={14} />
+                          </motion.button>
                         </div>
                       </div>
-                    </Tilt3D>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 'auto' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11.5, color: 'hsl(var(--muted-foreground))' }}>
+                          <span>{doneCards}/{totalCards} tasks done</span>
+                          <span style={{ fontWeight: 700, color: 'hsl(var(--foreground))' }}>{progress}%</span>
+                        </div>
+
+                        <div style={{ width: '100%', height: 6, borderRadius: 9999, backgroundColor: 'hsl(var(--card))', boxShadow: 'var(--neu-shadow-input)', overflow: 'hidden' }}>
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progress}%` }}
+                            transition={{ duration: 0.5, ease: 'easeOut' }}
+                            style={{
+                              height: '100%',
+                              backgroundColor: board.color,
+                              borderRadius: 9999
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'hsl(var(--muted-foreground))', paddingTop: 6 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <KanbanSquare size={12} /> {board.columns?.length ?? 0} columns
+                          </span>
+
+                          {/* Member Avatars */}
+                          {memberCount > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              {board.members.slice(0, 3).map((m, idx) => (
+                                <div
+                                  key={m.id}
+                                  style={{
+                                    width: 20,
+                                    height: 20,
+                                    borderRadius: '50%',
+                                    backgroundColor: m.color,
+                                    color: '#fff',
+                                    fontSize: 8.5,
+                                    fontWeight: 700,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginLeft: idx === 0 ? 0 : -6,
+                                    border: '2px solid hsl(var(--card))',
+                                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                                    overflow: 'hidden'
+                                  }}
+                                  title={m.name}
+                                >
+                                  {m.avatarUrl ? (
+                                    <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    avatarInitials(m.name)
+                                  )}
+                                </div>
+                              ))}
+                              {memberCount > 3 && (
+                                <div
+                                  style={{
+                                    width: 20,
+                                    height: 20,
+                                    borderRadius: '50%',
+                                    backgroundColor: 'hsl(var(--secondary))',
+                                    color: 'hsl(var(--secondary-foreground))',
+                                    fontSize: 8,
+                                    fontWeight: 700,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginLeft: -6,
+                                    border: '2px solid hsl(var(--card))'
+                                  }}
+                                >
+                                  +{memberCount - 3}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
                   );
                 })}
               </div>

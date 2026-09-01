@@ -231,18 +231,18 @@ alter table public.email_logs enable row level security;
 create or replace function public.is_board_member(board_id text)
 returns boolean as $$
 declare
-  user_email text := auth.jwt()->>'email';
+  user_email text := lower(coalesce(auth.jwt()->>'email', ''));
 begin
-  if user_email is null then
+  if user_email = '' then
     return false;
   end if;
 
   return exists (
     select 1 from public.boards b
-    where b.id = board_id and b.created_by = user_email
+    where b.id = board_id and lower(b.created_by) = user_email
   ) or exists (
     select 1 from public.board_members bm
-    where bm.board_id = board_id and bm.email = user_email
+    where bm.board_id = board_id and lower(bm.email) = user_email
   );
 end;
 $$ language plpgsql security definer stable;
@@ -256,24 +256,33 @@ create policy "Users can update own profile" on public.profiles
 -- 2. Boards: Viewable & editable only by creator or board members
 create policy "Users can view boards they belong to" on public.boards
   for select using (
-    created_by = auth.jwt()->>'email'
+    lower(created_by) = lower(coalesce(auth.jwt()->>'email', ''))
     or exists (
       select 1 from public.board_members bm 
-      where bm.board_id = boards.id and bm.email = auth.jwt()->>'email'
+      where bm.board_id = boards.id and lower(bm.email) = lower(coalesce(auth.jwt()->>'email', ''))
     )
   );
 create policy "Authenticated users can create boards" on public.boards
   for insert with check (auth.role() = 'authenticated');
 create policy "Board members can update boards" on public.boards
-  for update using (public.is_board_member(id));
+  for update using (
+    lower(created_by) = lower(coalesce(auth.jwt()->>'email', ''))
+    or public.is_board_member(id)
+  );
 create policy "Only board owner can delete boards" on public.boards
-  for delete using (created_by = auth.jwt()->>'email');
+  for delete using (lower(created_by) = lower(coalesce(auth.jwt()->>'email', '')));
 
--- 3. Board Members: Scoped to board membership
+-- 3. Board Members: Scoped to board membership or own email
 create policy "View board members of member boards" on public.board_members
-  for select using (public.is_board_member(board_id));
+  for select using (
+    lower(email) = lower(coalesce(auth.jwt()->>'email', ''))
+    or public.is_board_member(board_id)
+  );
 create policy "Board members can add members" on public.board_members
-  for insert with check (public.is_board_member(board_id));
+  for insert with check (
+    lower(email) = lower(coalesce(auth.jwt()->>'email', ''))
+    or public.is_board_member(board_id)
+  );
 create policy "Board members can update members" on public.board_members
   for update using (public.is_board_member(board_id));
 create policy "Board members can remove members" on public.board_members

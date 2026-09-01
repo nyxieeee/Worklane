@@ -143,11 +143,22 @@ export const useWorkStore = create<WorkState>((set, get) => ({
       const cloudBoards = await supabaseService.getBoardsForUser(cleanEmail);
       
       set(s => {
-        const activeBoardId = s.activeBoardId && cloudBoards.some(b => b.id === s.activeBoardId)
-          ? s.activeBoardId
-          : (cloudBoards[0]?.id ?? null);
+        // Automatically upload any board currently in memory that isn't on cloud yet
+        const boardsToSync = s.boards.filter(b => 
+          !cloudBoards.some(cb => cb.id === b.id) &&
+          (b.createdBy?.toLowerCase().trim() === cleanEmail || b.members?.some(m => m.email?.toLowerCase().trim() === cleanEmail))
+        );
 
-        return { boards: cloudBoards, activeBoardId, isLoadingCloud: false };
+        boardsToSync.forEach(b => {
+          supabaseService.syncBoard(b);
+        });
+
+        const merged = [...cloudBoards, ...boardsToSync];
+        const activeBoardId = s.activeBoardId && merged.some(b => b.id === s.activeBoardId)
+          ? s.activeBoardId
+          : (merged[0]?.id ?? null);
+
+        return { boards: merged, activeBoardId, isLoadingCloud: false };
       });
     } catch (err) {
       console.warn('[useWorkStore] Cloud load error:', err);

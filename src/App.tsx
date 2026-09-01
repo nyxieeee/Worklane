@@ -20,6 +20,7 @@ import { useNotifStore } from './store/useNotifStore';
 import { useEmailStore } from './store/useEmailStore';
 import { useAuthStore } from './store/useAuthStore';
 import { useThemeStore } from './store/useThemeStore';
+import { supabaseService } from './services/supabaseService';
 import { formatDueDate } from './utils';
 
 const CHECK_INTERVAL_MS = 10_000;
@@ -37,6 +38,7 @@ export default function App() {
   const switchBoard = useWorkStore(s => s.switchBoard);
   const updateCard = useWorkStore(s => s.updateCard);
   const syncCurrentUserProfile = useWorkStore(s => s.syncCurrentUserProfile);
+  const loadBoardsFromCloud = useWorkStore(s => s.loadBoardsFromCloud);
   const addNotification = useNotifStore(s => s.addNotification);
   const isDark = useThemeStore(s => s.isDark);
   const currentUser = useAuthStore(s => s.user);
@@ -45,6 +47,26 @@ export default function App() {
   useEffect(() => {
     initializeAuth();
   }, [initializeAuth]);
+
+  // Load cloud boards when user is logged in
+  useEffect(() => {
+    if (currentUser?.email) {
+      loadBoardsFromCloud(currentUser.email);
+    }
+  }, [currentUser?.email, loadBoardsFromCloud]);
+
+  // Realtime subscription: auto-refresh boards when changes happen on Supabase
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    const unsub = supabaseService.subscribeToAllBoards(() => {
+      if (currentUser?.email) {
+        loadBoardsFromCloud(currentUser.email);
+      }
+    });
+    return () => {
+      unsub();
+    };
+  }, [currentUser?.email, loadBoardsFromCloud]);
 
   // Sync user profile name with board memberships
   useEffect(() => {

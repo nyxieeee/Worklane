@@ -16,35 +16,39 @@ export const supabaseService = {
    * Fetch all boards for a given user email
    */
   async getBoardsForUser(email: string): Promise<Board[]> {
-    if (!isSupabaseConfigured()) return [];
+    if (!isSupabaseConfigured() || !email) return [];
 
     try {
       const cleanEmail = email.toLowerCase().trim();
       
-      // 1. Fetch boards where user is creator or member
-      const { data: memberRows, error: memberErr } = await supabase
+      // 1. Fetch board IDs where user is explicitly listed as member
+      const { data: memberRows } = await supabase
         .from('board_members')
         .select('board_id')
-        .eq('email', cleanEmail);
-
-      if (memberErr) throw memberErr;
+        .ilike('email', cleanEmail);
 
       const memberBoardIds = (memberRows || []).map(r => r.board_id);
 
+      // 2. Fetch boards matching created_by OR memberBoardIds OR direct RLS query
       let query = supabase.from('boards').select('*');
       if (memberBoardIds.length > 0) {
-        query = query.or(`created_by.eq.${cleanEmail},id.in.(${memberBoardIds.map(id => `"${id}"`).join(',')})`);
+        query = query.or(`created_by.ilike.${cleanEmail},id.in.(${memberBoardIds.map(id => `"${id}"`).join(',')})`);
       } else {
-        query = query.eq('created_by', cleanEmail);
+        query = query.ilike('created_by', cleanEmail);
       }
 
-      const { data: boardsData, error: boardsErr } = await query;
-      if (boardsErr) throw boardsErr;
+      let { data: boardsData, error: boardsErr } = await query;
+      if (boardsErr) {
+        // Fallback to select * (RLS filtered)
+        const fallback = await supabase.from('boards').select('*');
+        boardsData = fallback.data || [];
+      }
+
       if (!boardsData || boardsData.length === 0) return [];
 
       const boardIds = boardsData.map(b => b.id);
 
-      // 2. Fetch related data
+      // 3. Fetch all related entities in parallel
       const [membersRes, colsRes, cardsRes] = await Promise.all([
         supabase.from('board_members').select('*').in('board_id', boardIds),
         supabase.from('columns').select('*').in('board_id', boardIds).order('position'),
@@ -56,7 +60,7 @@ export const supabaseService = {
       const allCards = cardsRes.data || [];
       const cardIds = allCards.map(c => c.id);
 
-      // 3. Fetch card children
+      // 4. Fetch card children
       let allAssignees: any[] = [];
       let allLabels: any[] = [];
       let allComments: any[] = [];
@@ -76,7 +80,7 @@ export const supabaseService = {
         allAttachments = attachmentsRes.data || [];
       }
 
-      // 4. Assemble full domain Board structure
+      // 5. Assemble full domain Board structure
       const assembledBoards: Board[] = boardsData.map(b => {
         const bMembers: Member[] = allMembers
           .filter(m => m.board_id === b.id)
@@ -169,7 +173,7 @@ export const supabaseService = {
    * Save or update an entire board to Supabase
    */
   async syncBoard(board: Board): Promise<boolean> {
-    if (!isSupabaseConfigured()) return false;
+    if (!isSupabaseConfigured() || !board?.id) return false;
 
     try {
       // 1. Upsert Board
@@ -182,20 +186,29 @@ export const supabaseService = {
       });
       if (bErr) throw bErr;
 
-      // 2. Upsert Members
+      // 2. Upsert Members & remove deleted
+      const currentMemberIds = (board.members || []).map(m => m.id);
       if (board.members?.length > 0) {
         const memberRows = board.members.map(m => ({
           id: m.id,
           board_id: board.id,
           name: m.name,
-          email: m.email,
+          email: m.email.toLowerCase().trim(),
           color: m.color,
           avatar_url: m.avatarUrl || null,
         }));
-        await supabase.from('board_members').upsert(memberRows);
+        await supabase.from('board_members').upsert(memberRows, { onConflict: 'id' });
+      }
+      if (currentMemberIds.length > 0) {
+        await supabase
+          .from('board_members')
+          .delete()
+          .eq('board_id', board.id)
+          .not('id', 'in', `(${currentMemberIds.map(id => `"${id}"`).join(',')})`);
       }
 
-      // 3. Upsert Columns
+      // 3. Upsert Columns & remove deleted
+      const currentColIds = (board.columns || []).map(c => c.id);
       if (board.columns?.length > 0) {
         const colRows = board.columns.map((c, idx) => ({
           id: c.id,
@@ -203,81 +216,132 @@ export const supabaseService = {
           name: c.name,
           position: idx,
         }));
-        await supabase.from('columns').upsert(colRows);
+        await supabase.from('columns').upsert(colRows, { onConflict: 'id' });
+      }
+      if (currentColIds.length > 0) {
+        await supabase
+          .from('columns')
+          .delete()
+          .eq('board_id', board.id)
+          .not('id', 'in', `(${currentColIds.map(id => `"${id}"`).join(',')})`);
+      }
 
-        // 4. Upsert Cards
-        for (const col of board.columns) {
-          if (!col.cards?.length) continue;
+      // 4. Upsert Cards
+      const currentCardIds: string[] = [];
+      for (const col of board.columns || []) {
+        if (!col.cards?.length) continue;
 
-          for (let cIdx = 0; cIdx < col.cards.length; cIdx++) {
-            const card = col.cards[cIdx];
-            await supabase.from('cards').upsert({
-              id: card.id,
-              board_id: board.id,
-              column_id: col.id,
-              title: card.title,
-              description: card.description || '',
-              priority: card.priority || 'medium',
-              completed: !!card.completed,
-              completed_at: card.completedAt || null,
-              due_date: card.dueDate || null,
-              cover_attachment_id: card.coverAttachmentId || null,
-              position: cIdx,
-              updated_at: new Date().toISOString(),
-            });
+        for (let cIdx = 0; cIdx < col.cards.length; cIdx++) {
+          const card = col.cards[cIdx];
+          currentCardIds.push(card.id);
 
-            // Card Assignees
-            if (card.assignees?.length) {
-              const assRows = card.assignees.map(mId => ({
-                card_id: card.id,
-                member_id: mId,
-              }));
-              await supabase.from('card_assignees').upsert(assRows);
-            }
+          await supabase.from('cards').upsert({
+            id: card.id,
+            board_id: board.id,
+            column_id: col.id,
+            title: card.title,
+            description: card.description || '',
+            priority: card.priority || 'medium',
+            completed: !!card.completed,
+            completed_at: card.completedAt || null,
+            due_date: card.dueDate || null,
+            cover_attachment_id: card.coverAttachmentId || null,
+            position: cIdx,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
 
-            // Card Labels
-            if (card.labels?.length) {
-              const lblRows = card.labels.map(lId => ({
-                card_id: card.id,
-                label_id: lId,
-              }));
-              await supabase.from('card_labels').upsert(lblRows);
-            }
+          // Card Assignees
+          if (card.assignees && card.assignees.length > 0) {
+            const assRows = card.assignees.map(mId => ({
+              card_id: card.id,
+              member_id: mId,
+            }));
+            await supabase.from('card_assignees').upsert(assRows, { onConflict: 'card_id,member_id' });
+            // Clean up unassigned
+            await supabase
+              .from('card_assignees')
+              .delete()
+              .eq('card_id', card.id)
+              .not('member_id', 'in', `(${card.assignees.map(id => `"${id}"`).join(',')})`);
+          } else {
+            await supabase.from('card_assignees').delete().eq('card_id', card.id);
+          }
 
-            // Card Comments
-            if (card.comments?.length) {
-              const cmRows = card.comments.map(cm => ({
-                id: cm.id,
-                card_id: card.id,
-                author: cm.author,
-                author_initials: cm.authorInitials,
-                avatar_color: cm.avatarColor,
-                text: cm.text,
-                created_at: cm.createdAt,
-              }));
-              await supabase.from('comments').upsert(cmRows);
-            }
+          // Card Labels
+          if (card.labels && card.labels.length > 0) {
+            const lblRows = card.labels.map(lId => ({
+              card_id: card.id,
+              label_id: lId,
+            }));
+            await supabase.from('card_labels').upsert(lblRows, { onConflict: 'card_id,label_id' });
+            await supabase
+              .from('card_labels')
+              .delete()
+              .eq('card_id', card.id)
+              .not('label_id', 'in', `(${card.labels.map(id => `"${id}"`).join(',')})`);
+          } else {
+            await supabase.from('card_labels').delete().eq('card_id', card.id);
+          }
 
-            // Card Attachments
-            if (card.attachments?.length) {
-              const attRows = card.attachments.map(att => ({
-                id: att.id,
-                card_id: card.id,
-                name: att.name,
-                size: att.size,
-                type: att.type,
-                data_url: att.dataUrl,
-                added_at: att.addedAt,
-              }));
-              await supabase.from('attachments').upsert(attRows);
-            }
+          // Card Comments
+          if (card.comments?.length) {
+            const cmRows = card.comments.map(cm => ({
+              id: cm.id,
+              card_id: card.id,
+              author: cm.author,
+              author_initials: cm.authorInitials,
+              avatar_color: cm.avatarColor,
+              text: cm.text,
+              created_at: cm.createdAt,
+            }));
+            await supabase.from('comments').upsert(cmRows, { onConflict: 'id' });
+          }
+
+          // Card Attachments
+          if (card.attachments?.length) {
+            const attRows = card.attachments.map(att => ({
+              id: att.id,
+              card_id: card.id,
+              name: att.name,
+              size: att.size,
+              type: att.type,
+              data_url: att.dataUrl,
+              added_at: att.addedAt,
+            }));
+            await supabase.from('attachments').upsert(attRows, { onConflict: 'id' });
           }
         }
+      }
+
+      // Delete removed cards
+      if (currentCardIds.length > 0) {
+        await supabase
+          .from('cards')
+          .delete()
+          .eq('board_id', board.id)
+          .not('id', 'in', `(${currentCardIds.map(id => `"${id}"`).join(',')})`);
+      } else if (board.columns?.length > 0) {
+        await supabase.from('cards').delete().eq('board_id', board.id);
       }
 
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error syncing board:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Delete a board from Supabase
+   */
+  async deleteBoard(boardId: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !boardId) return false;
+    try {
+      const { error } = await supabase.from('boards').delete().eq('id', boardId);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Error deleting board:', err);
       return false;
     }
   },
@@ -328,16 +392,36 @@ export const supabaseService = {
   },
 
   /**
-   * Subscribe to realtime board events
+   * Subscribe to realtime database changes for all boards
    */
-  subscribeToBoard(boardId: string, onUpdate: () => void) {
+  subscribeToAllBoards(onUpdate: () => void) {
     if (!isSupabaseConfigured()) return () => {};
 
     const channel = supabase
-      .channel(`board-realtime-${boardId}`)
+      .channel('schema-db-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', filter: `board_id=eq.${boardId}` },
+        { event: '*', schema: 'public', table: 'boards' },
+        () => onUpdate()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'board_members' },
+        () => onUpdate()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'columns' },
+        () => onUpdate()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cards' },
+        () => onUpdate()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'comments' },
         () => onUpdate()
       )
       .subscribe();

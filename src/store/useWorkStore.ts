@@ -6,11 +6,17 @@ import { uid, avatarInitials } from '../utils';
 import { useEmailStore } from './useEmailStore';
 import { useAuthStore } from './useAuthStore';
 import { useNotifStore } from './useNotifStore';
+import { supabaseService } from '../services/supabaseService';
 
 interface WorkState {
   boards: Board[];
   activeBoardId: string | null;
   lastMoveSnapshot: Board | null;
+  isLoadingCloud: boolean;
+
+  // Cloud sync actions
+  loadBoardsFromCloud: (userEmail: string) => Promise<void>;
+  syncBoardToCloud: (boardId: string) => Promise<void>;
 
   // Board actions
   createBoard: (name: string, color: string, createdBy?: string, creatorName?: string) => void;
@@ -118,7 +124,6 @@ function buildDemoBoard(): Board {
     name: 'My First Board',
     color: '#6366f1',
     members: DEMO_MEMBERS,
-    // Urgent first in the fixed workflow order
     columns: [
       { id: colIds[2], name: 'Urgent',      cards: [card3] },
       { id: colIds[0], name: 'To Do',       cards: [card1] },
@@ -129,7 +134,6 @@ function buildDemoBoard(): Board {
   };
 }
 
-// helper: find a card across all columns of a board
 function findCardInBoard(board: Board, cardId: string): { card: Card; column: Column } | null {
   for (const col of board.columns) {
     const card = col.cards.find(c => c.id === cardId);
@@ -138,13 +142,15 @@ function findCardInBoard(board: Board, cardId: string): { card: Card; column: Co
   return null;
 }
 
-// helper: mutate boards immutably
-function updateBoards(boards: Board[], boardId: string, updater: (b: Board) => Board): Board[] {
-  return boards.map(b => b.id === boardId ? updater(b) : b);
+function updateBoards(boards: Board[], targetBoardId: string, updater: (b: Board) => Board): Board[] {
+  return boards.map(b => (b.id === targetBoardId ? updater(b) : b));
 }
 
-function updateColumns(board: Board, colId: string, updater: (c: Column) => Column): Board {
-  return { ...board, columns: (board.columns || []).map(c => c.id === colId ? updater(c) : c) };
+function updateColumns(board: Board, targetColId: string, updater: (col: Column) => Column): Board {
+  return {
+    ...board,
+    columns: (board.columns || []).map(c => (c.id === targetColId ? updater(c) : c)),
+  };
 }
 
 function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => Card): Board {
@@ -165,6 +171,7 @@ export const useWorkStore = create<WorkState>()(
       boards: [],
       activeBoardId: null,
       lastMoveSnapshot: null,
+      isLoadingCloud: false,
 
       getActiveBoard: () => {
         const { boards, activeBoardId } = get();
@@ -179,6 +186,50 @@ export const useWorkStore = create<WorkState>()(
         const result = findCardInBoard(board, cardId);
         if (!result) return null;
         return { ...result, board };
+      },
+
+      // ── Cloud Sync Actions ─────────────────────────────
+      loadBoardsFromCloud: async (userEmail: string) => {
+        if (!userEmail || !supabaseService.isConfigured()) return;
+        const cleanEmail = userEmail.toLowerCase().trim();
+        set({ isLoadingCloud: true });
+
+        try {
+          const cloudBoards = await supabaseService.getBoardsForUser(cleanEmail);
+          
+          set(s => {
+            // Check if there are local boards created by this user that need initial cloud push
+            const localBoardsToUpload = s.boards.filter(b => 
+              b.createdBy && 
+              b.createdBy.toLowerCase().trim() === cleanEmail && 
+              !cloudBoards.some(cb => cb.id === b.id)
+            );
+
+            // Upload any local-only boards in the background
+            localBoardsToUpload.forEach(b => {
+              supabaseService.syncBoard(b);
+            });
+
+            // Combine cloud boards and uploaded local boards
+            const merged = [...cloudBoards, ...localBoardsToUpload];
+            const finalBoards = merged.length > 0 ? merged : s.boards;
+            const activeBoardId = s.activeBoardId && finalBoards.some(b => b.id === s.activeBoardId)
+              ? s.activeBoardId
+              : (finalBoards[0]?.id ?? null);
+
+            return { boards: finalBoards, activeBoardId, isLoadingCloud: false };
+          });
+        } catch (err) {
+          console.warn('[useWorkStore] Cloud load error:', err);
+          set({ isLoadingCloud: false });
+        }
+      },
+
+      syncBoardToCloud: async (boardId: string) => {
+        const board = get().boards.find(b => b.id === boardId);
+        if (board) {
+          await supabaseService.syncBoard(board);
+        }
       },
 
       // ── Board actions ──────────────────────────────────
@@ -197,7 +248,6 @@ export const useWorkStore = create<WorkState>()(
           color,
           createdBy,
           members: creatorMember ? [creatorMember] : [],
-          // Urgent first in fixed workflow order
           columns: [
             { id: uid(), name: 'Urgent',      cards: [] },
             { id: uid(), name: 'To Do',       cards: [] },
@@ -207,6 +257,7 @@ export const useWorkStore = create<WorkState>()(
           ],
         };
         set(s => ({ boards: [...s.boards, board], activeBoardId: board.id }));
+        supabaseService.syncBoard(board);
       },
 
       syncCurrentUserProfile: (user) => {
@@ -215,8 +266,8 @@ export const useWorkStore = create<WorkState>()(
         const fullName = user.name?.trim();
         if (!fullName) return;
 
-        set(s => ({
-          boards: s.boards.map(b => ({
+        set(s => {
+          const updatedBoards = s.boards.map(b => ({
             ...b,
             members: b.members.map(m => {
               if (m.email && m.email.toLowerCase().trim() === email) {
@@ -228,8 +279,9 @@ export const useWorkStore = create<WorkState>()(
               }
               return m;
             })
-          }))
-        }));
+          }));
+          return { boards: updatedBoards };
+        });
       },
 
       getVisibleBoards: (userEmail) => {
@@ -237,11 +289,8 @@ export const useWorkStore = create<WorkState>()(
         if (!userEmail) return boards;
         const email = userEmail.toLowerCase().trim();
         return boards.filter(b => {
-          // Explicit creator
           if (b.createdBy && b.createdBy.toLowerCase().trim() === email) return true;
-          // Explicit board member
           if (b.members && b.members.some(m => m.email && m.email.toLowerCase().trim() === email)) return true;
-          // Legacy boards without creator: only visible if no specific members are defined
           if (!b.createdBy && (!b.members || b.members.length === 0)) return true;
           return false;
         });
@@ -255,10 +304,13 @@ export const useWorkStore = create<WorkState>()(
             : s.activeBoardId;
           return { boards, activeBoardId };
         });
+        supabaseService.deleteBoard(boardId);
       },
 
       leaveBoard: (boardId, userEmail) => {
         const email = userEmail.toLowerCase().trim();
+        let targetBoard: Board | undefined;
+
         set(s => {
           const board = s.boards.find(b => b.id === boardId);
           if (!board) return s;
@@ -280,6 +332,8 @@ export const useWorkStore = create<WorkState>()(
             };
           });
 
+          targetBoard = updatedBoards.find(b => b.id === boardId);
+
           const visibleRemaining = updatedBoards.filter(b => 
             (b.createdBy && b.createdBy.toLowerCase().trim() === email) ||
             b.members.some(m => m.email && m.email.toLowerCase().trim() === email)
@@ -291,43 +345,53 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: updatedBoards, activeBoardId };
         });
+
+        if (targetBoard) {
+          supabaseService.syncBoard(targetBoard);
+        }
       },
 
       switchBoard: (boardId) => set({ activeBoardId: boardId }),
 
       // ── Column actions ─────────────────────────────────
       addColumn: (name) => {
+        let targetBoard: Board | undefined;
         set(s => {
           if (!s.activeBoardId) return s;
           const col: Column = { id: uid(), name, cards: [] };
-          return {
-            boards: updateBoards(s.boards, s.activeBoardId, b => ({
-              ...b, columns: [...b.columns, col],
-            })),
-          };
+          const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => ({
+            ...b, columns: [...b.columns, col],
+          }));
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       deleteColumn: (colId) => {
+        let targetBoard: Board | undefined;
         set(s => {
           if (!s.activeBoardId) return s;
-          return {
-            boards: updateBoards(s.boards, s.activeBoardId, b => ({
-              ...b, columns: b.columns.filter(c => c.id !== colId),
-            })),
-          };
+          const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => ({
+            ...b, columns: b.columns.filter(c => c.id !== colId),
+          }));
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       renameColumn: (colId, name) => {
+        let targetBoard: Board | undefined;
         set(s => {
           if (!s.activeBoardId) return s;
-          return {
-            boards: updateBoards(s.boards, s.activeBoardId, b =>
-              updateColumns(b, colId, c => ({ ...c, name }))
-            ),
-          };
+          const updatedBoards = updateBoards(s.boards, s.activeBoardId, b =>
+            updateColumns(b, colId, c => ({ ...c, name }))
+          );
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       addCard: (colId, title) => {
@@ -339,73 +403,83 @@ export const useWorkStore = create<WorkState>()(
           completed: false, completedAt: null,
           createdAt: new Date().toISOString(),
         };
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b => b.columns?.some(c => c.id === colId)) || s.boards.find(b => b.id === s.activeBoardId);
-          if (!targetBoard) return s;
-          return {
-            boards: updateBoards(s.boards, targetBoard.id, b =>
-              updateColumns(b, colId, c => ({ ...c, cards: [...(c.cards || []), card] }))
-            ),
-          };
+          const tb = s.boards.find(b => b.columns?.some(c => c.id === colId)) || s.boards.find(b => b.id === s.activeBoardId);
+          if (!tb) return s;
+          const updatedBoards = updateBoards(s.boards, tb.id, b =>
+            updateColumns(b, colId, c => ({ ...c, cards: [...(c.cards || []), card] }))
+          );
+          targetBoard = updatedBoards.find(b => b.id === tb.id);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
         return card;
       },
 
       updateCard: (cardId, patch) => {
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
           const extraPatch = 'dueDate' in patch ? {
             [`alerted24_${cardId}`]: false,
             [`alertedOD_${cardId}`]: false,
           } : {};
 
-          return {
-            boards: updateBoards(s.boards, targetBoard.id, b =>
-              updateCardInBoard(b, cardId, c => ({ ...c, ...patch, ...extraPatch }))
-            ),
-          };
+          const updatedBoards = updateBoards(s.boards, tb.id, b =>
+            updateCardInBoard(b, cardId, c => ({ ...c, ...patch, ...extraPatch }))
+          );
+          targetBoard = updatedBoards.find(b => b.id === tb.id);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       deleteCard: (cardId) => {
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
-          return {
-            boards: updateBoards(s.boards, targetBoard.id, b => ({
-              ...b,
-              columns: b.columns.map(col => ({
-                ...col, cards: (col.cards || []).filter(c => c.id !== cardId),
-              })),
+          const updatedBoards = updateBoards(s.boards, tb.id, b => ({
+            ...b,
+            columns: b.columns.map(col => ({
+              ...col, cards: (col.cards || []).filter(c => c.id !== cardId),
             })),
-          };
+          }));
+          targetBoard = updatedBoards.find(b => b.id === tb.id);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       undoLastMove: () => {
+        let targetBoard: Board | undefined;
         set(s => {
           if (!s.lastMoveSnapshot || !s.activeBoardId) return s;
           const snapshot = s.lastMoveSnapshot;
+          const updatedBoards = s.boards.map(b => b.id === s.activeBoardId ? snapshot : b);
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return {
-            boards: s.boards.map(b => b.id === s.activeBoardId ? snapshot : b),
+            boards: updatedBoards,
             lastMoveSnapshot: null,
           };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       moveCard: (cardId, fromColId, toColId, afterCardId) => {
+        let targetBoard: Board | undefined;
         set(s => {
           if (!s.activeBoardId) return s;
-          // Save snapshot for undo before any mutation
           const currentBoard = s.boards.find(b => b.id === s.activeBoardId);
           const snapshot = currentBoard ? JSON.parse(JSON.stringify(currentBoard)) as Board : null;
 
@@ -417,7 +491,6 @@ export const useWorkStore = create<WorkState>()(
             const sourceCard = fromCol.cards[cardIdx];
             const toCol = board.columns.find(c => c.id === toColId);
 
-            // Auto-complete when dropped on 'Done'; auto-uncomplete when moved out
             const isDoneTarget = toCol?.name.trim().toLowerCase() === 'done';
             const isDoneSource = fromCol.name.trim().toLowerCase() === 'done';
             const isMovingColumns = fromColId !== toColId;
@@ -455,23 +528,26 @@ export const useWorkStore = create<WorkState>()(
             return { ...board, columns: newColumns };
           });
 
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards, lastMoveSnapshot: snapshot };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       toggleCardComplete: (cardId) => {
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
-          let updatedTitle = '';
           let isNowComplete = false;
+          let updatedTitle = '';
           let cardAssignees: string[] = [];
 
-          const resultBoards = updateBoards(s.boards, targetBoard.id, b =>
+          const resultBoards = updateBoards(s.boards, tb.id, b =>
             updateCardInBoard(b, cardId, c => {
               isNowComplete = !c.completed;
               updatedTitle = c.title;
@@ -484,22 +560,23 @@ export const useWorkStore = create<WorkState>()(
             })
           );
 
+          targetBoard = resultBoards.find(b => b.id === tb.id);
+
           const currentUser = useAuthStore.getState().user;
-          // Send notification ONLY to assigned members of this specific card
           cardAssignees.forEach(mId => {
-            const member = targetBoard.members?.find(m => m.id === mId);
+            const member = tb.members?.find(m => m.id === mId);
             if (member && member.email) {
               if (member.email.toLowerCase().trim() !== currentUser?.email?.toLowerCase().trim()) {
                 useNotifStore.getState().addNotification(
                   `Task ${isNowComplete ? 'Completed' : 'Reopened'}: ${updatedTitle}`,
-                  `"${updatedTitle}" was marked as ${isNowComplete ? 'done' : 'incomplete'} on board "${targetBoard.name}"`,
+                  `"${updatedTitle}" was marked as ${isNowComplete ? 'done' : 'incomplete'} on board "${tb.name}"`,
                   isNowComplete ? 'check' : 'clock',
-                  cardId, targetBoard.id, member.email
+                  cardId, tb.id, member.email
                 );
                 useEmailStore.getState().sendEmailNotification({
                   recipient: member,
                   subject: `Status Update: ${updatedTitle} is ${isNowComplete ? 'Completed' : 'Reopened'}`,
-                  body: `Hi ${member.name},\n\nThe task "${updatedTitle}" was marked as ${isNowComplete ? 'completed' : 'incomplete'} on board "${targetBoard.name}".\n\nBest regards,\nWorklane Team`,
+                  body: `Hi ${member.name},\n\nThe task "${updatedTitle}" was marked as ${isNowComplete ? 'completed' : 'incomplete'} on board "${tb.name}".\n\nBest regards,\nWorklane Team`,
                   eventType: 'status_changed',
                 });
               }
@@ -508,43 +585,47 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: resultBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       toggleCardLabel: (cardId, labelId) => {
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
-          return {
-            boards: updateBoards(s.boards, targetBoard.id, b =>
-              updateCardInBoard(b, cardId, c => {
-                const currentLabels = c.labels || [];
-                const labels = currentLabels.includes(labelId)
-                  ? currentLabels.filter(l => l !== labelId)
-                  : [...currentLabels, labelId];
-                return { ...c, labels };
-              })
-            ),
-          };
+          const updatedBoards = updateBoards(s.boards, tb.id, b =>
+            updateCardInBoard(b, cardId, c => {
+              const current = c.labels || [];
+              const labels = current.includes(labelId)
+                ? current.filter(l => l !== labelId)
+                : [...current, labelId];
+              return { ...c, labels };
+            })
+          );
+          targetBoard = updatedBoards.find(b => b.id === tb.id);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       toggleCardAssignee: (cardId, memberId) => {
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
-          const member = targetBoard.members?.find(m => m.id === memberId);
+          const member = tb.members?.find(m => m.id === memberId);
           let assignedCardTitle = '';
           let isAssigning = false;
-          
-          const result = updateBoards(s.boards, targetBoard.id, b =>
+
+          const result = updateBoards(s.boards, tb.id, b =>
             updateCardInBoard(b, cardId, c => {
               assignedCardTitle = c.title;
               const currentAssignees = c.assignees || [];
@@ -557,60 +638,66 @@ export const useWorkStore = create<WorkState>()(
             })
           );
 
-          // Notify ONLY the assigned member
+          targetBoard = result.find(b => b.id === tb.id);
+
           if (isAssigning && member && member.email) {
             useNotifStore.getState().addNotification(
               `Assigned: ${assignedCardTitle}`,
-              `You were assigned to "${assignedCardTitle}" on board "${targetBoard.name}"`,
-              'users', cardId, targetBoard.id, member.email
+              `You were assigned to "${assignedCardTitle}" on board "${tb.name}"`,
+              'users', cardId, tb.id, member.email
             );
             useEmailStore.getState().sendEmailNotification({
               recipient: member,
               subject: `New Task Assigned: ${assignedCardTitle}`,
-              body: `Hi ${member.name},\n\nYou have been assigned to the card "${assignedCardTitle}" on board "${targetBoard.name}".\n\nBest regards,\nWorklane Team`,
+              body: `Hi ${member.name},\n\nYou have been assigned to the card "${assignedCardTitle}" on board "${tb.name}".\n\nBest regards,\nWorklane Team`,
               eventType: 'card_assigned',
             });
           }
 
           return { boards: result };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       // ── Attachment actions ────────────────────────────
       addAttachment: (cardId, att) => {
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
-          return {
-            boards: updateBoards(s.boards, targetBoard.id, b =>
-              updateCardInBoard(b, cardId, c => ({
-                ...c, attachments: [...(c.attachments || []), att],
-              }))
-            ),
-          };
+          const updatedBoards = updateBoards(s.boards, tb.id, b =>
+            updateCardInBoard(b, cardId, c => ({
+              ...c, attachments: [...(c.attachments || []), att],
+            }))
+          );
+          targetBoard = updatedBoards.find(b => b.id === tb.id);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       removeAttachment: (cardId, attId) => {
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
-          return {
-            boards: updateBoards(s.boards, targetBoard.id, b =>
-              updateCardInBoard(b, cardId, c => ({
-                ...c, attachments: (c.attachments || []).filter(a => a.id !== attId),
-              }))
-            ),
-          };
+          const updatedBoards = updateBoards(s.boards, tb.id, b =>
+            updateCardInBoard(b, cardId, c => ({
+              ...c, attachments: (c.attachments || []).filter(a => a.id !== attId),
+            }))
+          );
+          targetBoard = updatedBoards.find(b => b.id === tb.id);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       // ── Comment actions ───────────────────────────────
@@ -628,17 +715,19 @@ export const useWorkStore = create<WorkState>()(
           createdAt: new Date().toISOString(),
         };
 
+        let targetBoard: Board | undefined;
+
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
           let cardTitle = '';
           let cardAssignees: string[] = [];
 
-          const resultBoards = updateBoards(s.boards, targetBoard.id, b =>
+          const resultBoards = updateBoards(s.boards, tb.id, b =>
             updateCardInBoard(b, cardId, c => {
               cardTitle = c.title;
               cardAssignees = c.assignees || [];
@@ -646,16 +735,16 @@ export const useWorkStore = create<WorkState>()(
             })
           );
 
-          // 1. Find explicitly mentioned members
+          targetBoard = resultBoards.find(b => b.id === tb.id);
+
           const lowerText = text.toLowerCase();
-          const mentionedMembers = (targetBoard.members || []).filter(m => {
+          const mentionedMembers = (tb.members || []).filter(m => {
             const nameMatch = m.name && lowerText.includes(`@${m.name.toLowerCase()}`);
             const emailMatch = m.email && lowerText.includes(`@${m.email.toLowerCase()}`);
             const firstWordMatch = m.name && lowerText.includes(`@${m.name.split(' ')[0].toLowerCase()}`);
             return nameMatch || emailMatch || firstWordMatch;
           });
 
-          // Send mention notifications to mentioned members
           const notifiedEmails = new Set<string>();
           mentionedMembers.forEach(m => {
             if (m.email) {
@@ -663,20 +752,19 @@ export const useWorkStore = create<WorkState>()(
               useNotifStore.getState().addNotification(
                 `Mentioned: ${cardTitle}`,
                 `${authorName} mentioned you in a comment on "${cardTitle}"`,
-                'message', cardId, targetBoard.id, m.email
+                'message', cardId, tb.id, m.email
               );
               useEmailStore.getState().sendEmailNotification({
                 recipient: m,
                 subject: `[Mention] ${authorName} mentioned you on "${cardTitle}"`,
-                body: `Hi ${m.name},\n\n${authorName} mentioned you in a comment on card "${cardTitle}" in board "${targetBoard.name}":\n\n"${text}"\n\nBest regards,\nWorklane Team`,
+                body: `Hi ${m.name},\n\n${authorName} mentioned you in a comment on card "${cardTitle}" in board "${tb.name}":\n\n"${text}"\n\nBest regards,\nWorklane Team`,
                 eventType: 'mention',
               });
             }
           });
 
-          // 2. Notify assigned members of this specific card who were not already notified via mention
           cardAssignees.forEach(mId => {
-            const member = targetBoard.members?.find(m => m.id === mId);
+            const member = tb.members?.find(m => m.id === mId);
             if (member && member.email) {
               const memEmail = member.email.toLowerCase().trim();
               const isAuthor = currentUser?.email && memEmail === currentUser.email.toLowerCase().trim();
@@ -685,12 +773,12 @@ export const useWorkStore = create<WorkState>()(
                 useNotifStore.getState().addNotification(
                   `New Comment: ${cardTitle}`,
                   `${authorName} commented on "${cardTitle}"`,
-                  'message', cardId, targetBoard.id, member.email
+                  'message', cardId, tb.id, member.email
                 );
                 useEmailStore.getState().sendEmailNotification({
                   recipient: member,
                   subject: `New Comment on "${cardTitle}"`,
-                  body: `Hi ${member.name},\n\n${authorName} commented on task "${cardTitle}" in board "${targetBoard.name}":\n\n"${text}"\n\nBest regards,\nWorklane Team`,
+                  body: `Hi ${member.name},\n\n${authorName} commented on task "${cardTitle}" in board "${tb.name}":\n\n"${text}"\n\nBest regards,\nWorklane Team`,
                   eventType: 'comment_added',
                 });
               }
@@ -699,106 +787,94 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: resultBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       deleteComment: (cardId, commentId) => {
+        let targetBoard: Board | undefined;
         set(s => {
-          const targetBoard = s.boards.find(b =>
+          const tb = s.boards.find(b =>
             b.columns?.some(col => col.cards?.some(c => c.id === cardId))
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
-          if (!targetBoard) return s;
+          if (!tb) return s;
 
-          return {
-            boards: updateBoards(s.boards, targetBoard.id, b =>
-              updateCardInBoard(b, cardId, c => ({
-                ...c, comments: (c.comments || []).filter(cm => cm.id !== commentId),
-              }))
-            ),
-          };
+          const updatedBoards = updateBoards(s.boards, tb.id, b =>
+            updateCardInBoard(b, cardId, c => ({
+              ...c, comments: (c.comments || []).filter(cm => cm.id !== commentId),
+            }))
+          );
+          targetBoard = updatedBoards.find(b => b.id === tb.id);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       // ── Member actions ────────────────────────────────
       addMember: (name, email, avatarUrl) => {
         let newId: string | null = null;
+        let targetBoard: Board | undefined;
         set(s => {
           if (!s.activeBoardId) return s;
-          return {
-            boards: updateBoards(s.boards, s.activeBoardId, b => {
-              if (email && b.members.some(m => m.email === email)) return b;
-              const color = AVATAR_COLORS[b.members.length % AVATAR_COLORS.length];
-              newId = uid();
-              const newMember: Member = { id: newId!, name, email, color, avatarUrl };
-              return { ...b, members: [...b.members, newMember] };
-            }),
-          };
+          const cleanEmail = email ? email.toLowerCase().trim() : '';
+          const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => {
+            if (cleanEmail && b.members.some(m => m.email && m.email.toLowerCase().trim() === cleanEmail)) return b;
+            const color = AVATAR_COLORS[b.members.length % AVATAR_COLORS.length];
+            newId = uid();
+            const newMember: Member = { id: newId!, name, email: cleanEmail, color, avatarUrl };
+            return { ...b, members: [...b.members, newMember] };
+          });
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) {
+          supabaseService.syncBoard(targetBoard);
+        }
         return newId;
       },
 
       updateMember: (memberId, patch) => {
+        let targetBoard: Board | undefined;
         set(s => {
           if (!s.activeBoardId) return s;
-          return {
-            boards: updateBoards(s.boards, s.activeBoardId, b => ({
-              ...b,
-              members: b.members.map(m => m.id === memberId ? { ...m, ...patch } : m),
-            })),
-          };
+          const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => ({
+            ...b,
+            members: b.members.map(m => m.id === memberId ? { ...m, ...patch } : m),
+          }));
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
 
       removeMember: (memberId) => {
+        let targetBoard: Board | undefined;
         set(s => {
           if (!s.activeBoardId) return s;
-          return {
-            boards: updateBoards(s.boards, s.activeBoardId, b => ({
-              ...b,
-              members: b.members.filter(m => m.id !== memberId),
-              columns: b.columns.map(col => ({
-                ...col,
-                cards: col.cards.map(c => ({
-                  ...c, assignees: c.assignees.filter(a => a !== memberId),
-                })),
+          const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => ({
+            ...b,
+            members: b.members.filter(m => m.id !== memberId),
+            columns: b.columns.map(col => ({
+              ...col,
+              cards: col.cards.map(c => ({
+                ...c, assignees: c.assignees.filter(a => a !== memberId),
               })),
             })),
-          };
+          }));
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
+          return { boards: updatedBoards };
         });
+        if (targetBoard) supabaseService.syncBoard(targetBoard);
       },
     }),
     {
-      name: 'worklane_data_v2',
-      // On first load, seed with demo board if empty
+      name: 'worklane_data_v3',
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         if (state.boards.length === 0) {
           const demo = buildDemoBoard();
           state.boards = [demo];
           state.activeBoardId = demo.id;
-        } else {
-          // Auto-migrate existing boards: sanitize emojis and ensure urgent column
-          state.boards = state.boards.map(b => {
-            const hasUrgent = b.columns?.some(c => c.name.trim().toLowerCase() === 'urgent');
-            let cols = b.columns ? b.columns.map(col => ({
-              ...col,
-              cards: col.cards.map(c => ({
-                ...c,
-                title: c.title.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim(),
-              }))
-            })) : [];
-
-            if (!hasUrgent && cols.length > 0) {
-              const inProgIdx = cols.findIndex(c => c.name.trim().toLowerCase() === 'in progress');
-              const urgentCol: Column = { id: uid(), name: 'Urgent', cards: [] };
-              if (inProgIdx !== -1) {
-                cols.splice(inProgIdx + 1, 0, urgentCol);
-              } else {
-                cols.push(urgentCol);
-              }
-            }
-            return { ...b, columns: cols };
-          });
         }
       },
     }

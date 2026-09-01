@@ -17,9 +17,9 @@ export default function CreateBoardModal({ onClose }: Props) {
   const [name, setName] = useState('');
   const [selectedColor, setSelectedColor] = useState<string>(BOARD_COLORS[0].value);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return;
-    createBoard(name.trim(), selectedColor, user?.email, user?.name);
+    await createBoard(name.trim(), selectedColor, user?.email, user?.name);
     showToast(`Board "${name.trim()}" created`, 'success');
     setName('');
     setSelectedColor(BOARD_COLORS[0].value);

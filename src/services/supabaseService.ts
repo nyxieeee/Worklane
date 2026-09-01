@@ -13,42 +13,53 @@ export const supabaseService = {
   },
 
   /**
-   * Fetch all boards for a given user email
+   * Fetch all boards for authenticated user
    */
   async getBoardsForUser(email: string): Promise<Board[]> {
     if (!isSupabaseConfigured() || !email) return [];
 
     try {
       const cleanEmail = email.toLowerCase().trim();
-      
-      // 1. Fetch board IDs where user is explicitly listed as member
-      const { data: memberRows } = await supabase
-        .from('board_members')
-        .select('board_id')
-        .ilike('email', cleanEmail);
 
-      const memberBoardIds = (memberRows || []).map(r => r.board_id);
+      // 1. Query boards table directly (RLS returns boards user owns or belongs to)
+      let { data: boardsData, error: boardsErr } = await supabase
+        .from('boards')
+        .select('*')
+        .order('created_at', { ascending: true });
 
-      // 2. Fetch boards matching created_by OR memberBoardIds OR direct RLS query
-      let query = supabase.from('boards').select('*');
-      if (memberBoardIds.length > 0) {
-        query = query.or(`created_by.ilike.${cleanEmail},id.in.(${memberBoardIds.map(id => `"${id}"`).join(',')})`);
-      } else {
-        query = query.ilike('created_by', cleanEmail);
+      // Fallback: If RLS query returned empty, try explicit creator/member filter
+      if ((!boardsData || boardsData.length === 0) && !boardsErr) {
+        const { data: memberRows } = await supabase
+          .from('board_members')
+          .select('board_id')
+          .ilike('email', cleanEmail);
+
+        const memberBoardIds = (memberRows || []).map(r => r.board_id);
+        if (memberBoardIds.length > 0) {
+          const { data: explicitBoards } = await supabase
+            .from('boards')
+            .select('*')
+            .or(`created_by.ilike.${cleanEmail},id.in.(${memberBoardIds.map(id => `"${id}"`).join(',')})`);
+          boardsData = explicitBoards || [];
+        } else {
+          const { data: createdBoards } = await supabase
+            .from('boards')
+            .select('*')
+            .ilike('created_by', cleanEmail);
+          boardsData = createdBoards || [];
+        }
       }
 
-      let { data: boardsData, error: boardsErr } = await query;
       if (boardsErr) {
-        // Fallback to select * (RLS filtered)
-        const fallback = await supabase.from('boards').select('*');
-        boardsData = fallback.data || [];
+        console.warn('[SupabaseService] getBoards error:', boardsErr);
+        return [];
       }
 
       if (!boardsData || boardsData.length === 0) return [];
 
       const boardIds = boardsData.map(b => b.id);
 
-      // 3. Fetch all related entities in parallel
+      // 2. Fetch all members, columns, and cards for these boards
       const [membersRes, colsRes, cardsRes] = await Promise.all([
         supabase.from('board_members').select('*').in('board_id', boardIds),
         supabase.from('columns').select('*').in('board_id', boardIds).order('position'),
@@ -60,7 +71,7 @@ export const supabaseService = {
       const allCards = cardsRes.data || [];
       const cardIds = allCards.map(c => c.id);
 
-      // 4. Fetch card children
+      // 3. Fetch card children
       let allAssignees: any[] = [];
       let allLabels: any[] = [];
       let allComments: any[] = [];
@@ -80,7 +91,7 @@ export const supabaseService = {
         allAttachments = attachmentsRes.data || [];
       }
 
-      // 5. Assemble full domain Board structure
+      // 4. Assemble domain Board structure
       const assembledBoards: Board[] = boardsData.map(b => {
         const bMembers: Member[] = allMembers
           .filter(m => m.board_id === b.id)
@@ -183,12 +194,15 @@ export const supabaseService = {
         color: board.color,
         created_by: board.createdBy || 'unknown',
         updated_at: new Date().toISOString(),
-      });
-      if (bErr) throw bErr;
+      }, { onConflict: 'id' });
 
-      // 2. Upsert Members & remove deleted
-      const currentMemberIds = (board.members || []).map(m => m.id);
-      if (board.members?.length > 0) {
+      if (bErr) {
+        console.error('[SupabaseService] Error syncing board:', bErr);
+        return false;
+      }
+
+      // 2. Upsert Members
+      if (board.members && board.members.length > 0) {
         const memberRows = board.members.map(m => ({
           id: m.id,
           board_id: board.id,
@@ -197,8 +211,12 @@ export const supabaseService = {
           color: m.color,
           avatar_url: m.avatarUrl || null,
         }));
-        await supabase.from('board_members').upsert(memberRows, { onConflict: 'id' });
+        const { error: mErr } = await supabase.from('board_members').upsert(memberRows, { onConflict: 'id' });
+        if (mErr) console.warn('[SupabaseService] Member upsert warning:', mErr);
       }
+
+      // Clean up removed members
+      const currentMemberIds = (board.members || []).map(m => m.id);
       if (currentMemberIds.length > 0) {
         await supabase
           .from('board_members')
@@ -207,7 +225,7 @@ export const supabaseService = {
           .not('id', 'in', `(${currentMemberIds.map(id => `"${id}"`).join(',')})`);
       }
 
-      // 3. Upsert Columns & remove deleted
+      // 3. Upsert Columns
       const currentColIds = (board.columns || []).map(c => c.id);
       if (board.columns?.length > 0) {
         const colRows = board.columns.map((c, idx) => ({
@@ -257,7 +275,6 @@ export const supabaseService = {
               member_id: mId,
             }));
             await supabase.from('card_assignees').upsert(assRows, { onConflict: 'card_id,member_id' });
-            // Clean up unassigned
             await supabase
               .from('card_assignees')
               .delete()
@@ -332,6 +349,31 @@ export const supabaseService = {
   },
 
   /**
+   * Directly add a single member to a board in Supabase
+   */
+  async addMember(boardId: string, member: Member): Promise<boolean> {
+    if (!isSupabaseConfigured() || !boardId || !member?.email) return false;
+    try {
+      const { error } = await supabase.from('board_members').upsert({
+        id: member.id,
+        board_id: boardId,
+        name: member.name,
+        email: member.email.toLowerCase().trim(),
+        color: member.color,
+        avatar_url: member.avatarUrl || null,
+      }, { onConflict: 'id' });
+      if (error) {
+        console.error('[SupabaseService] Error adding member directly:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('[SupabaseService] Exception adding member directly:', err);
+      return false;
+    }
+  },
+
+  /**
    * Delete a board from Supabase
    */
   async deleteBoard(boardId: string): Promise<boolean> {
@@ -359,7 +401,6 @@ export const supabaseService = {
       });
       if (error) throw error;
 
-      // Generate signed URL for private bucket access
       const { data, error: signErr } = await supabase.storage
         .from('attachments')
         .createSignedUrl(path, expiresInSeconds);

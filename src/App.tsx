@@ -121,6 +121,21 @@ export default function App() {
     if (!isAuthenticated) setPage('dashboard');
   }, [isAuthenticated]);
 
+  // If currently on a board that gets deleted, safely switch to next board or return to overview
+  useEffect(() => {
+    if (page === 'board') {
+      const currentBoards = useWorkStore.getState().boards;
+      const boardExists = currentBoards.some(b => b.id === activeBoardId);
+      if (!boardExists) {
+        if (currentBoards.length > 0) {
+          switchBoard(currentBoards[0].id);
+        } else {
+          setPage('dashboard');
+        }
+      }
+    }
+  }, [page, activeBoardId, switchBoard]);
+
   const handleSelectBoard = useCallback((boardId: string) => {
     switchBoard(boardId);
     setPage('board');

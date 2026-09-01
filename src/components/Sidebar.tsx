@@ -56,13 +56,6 @@ export default function Sidebar({
   const activeBoard = useWorkStore.getState().getActiveBoard();
   const teamMembers = activeBoard?.members ?? [];
 
-  // Auto-switch active board if no longer visible to this user
-  useEffect(() => {
-    if (!activeBoardId) return;
-    const isVisible = boards.some(b => b.id === activeBoardId);
-    if (!isVisible && boards.length > 0) onSelectBoard(boards[0].id);
-  }, [boards, activeBoardId, onSelectBoard]);
-
   // ── Collapsed Sidebar ──
   if (collapsed) {
     return (

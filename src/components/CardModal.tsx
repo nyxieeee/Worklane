@@ -404,7 +404,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
         </div>
 
         {/* Modal Body: 2 Columns */}
-        <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 28, padding: '20px 28px 28px 28px' }}>
+        <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 28, padding: '20px 28px 28px 28px' }}>
           {/* Main Area */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* Title Field */}
@@ -799,34 +799,46 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                       style={{
                         fontSize: 11.5,
                         fontWeight: 600,
-                        padding: '4px 10px',
+                        padding: '4px 9px',
                         borderRadius: 8,
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 6,
+                        gap: 5,
                         boxShadow: isSelected
                           ? 'var(--neu-shadow-pressed)'
                           : 'var(--neu-shadow-raised-sm)',
                         backgroundColor: isSelected ? l.color : 'hsl(var(--card))',
                         color: isSelected ? '#ffffff' : 'hsl(var(--foreground))',
                         cursor: 'pointer',
-                        border: isSelected ? `1px solid ${l.color}` : '1px solid transparent'
+                        border: `1px solid ${isSelected ? l.color : 'hsl(var(--border) / 0.5)'}`,
+                        boxSizing: 'border-box'
                       }}
                       onClick={() => toggleCardLabel(cardId, l.id)}
                     >
-                      {isSelected ? (
-                        <Check size={11} strokeWidth={3} />
-                      ) : (
-                        <span
-                          style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: '50%',
-                            backgroundColor: l.color,
-                            flexShrink: 0
-                          }}
-                        />
-                      )}
+                      <span
+                        style={{
+                          width: 12,
+                          height: 12,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}
+                      >
+                        {isSelected ? (
+                          <Check size={11} strokeWidth={3} />
+                        ) : (
+                          <span
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              backgroundColor: l.color,
+                              flexShrink: 0
+                            }}
+                          />
+                        )}
+                      </span>
                       <span>{l.name}</span>
                     </motion.button>
                   );

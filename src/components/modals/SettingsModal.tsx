@@ -35,11 +35,13 @@ export default function SettingsModal({ initialTab = 'appearance', onClose }: Pr
   const addLabel = useSettingsStore(s => s.addLabel);
   const removeLabel = useSettingsStore(s => s.removeLabel);
 
-  const boards = useWorkStore(s => s.boards);
+  const getVisibleBoards = useWorkStore(s => s.getVisibleBoards);
   const notifications = useNotifStore(s => s.notifications);
   const clearNotifications = useNotifStore(s => s.clearAll);
   const user = useAuthStore(s => s.user);
   const showToast = useToastStore(s => s.showToast);
+
+  const boards = getVisibleBoards(user?.email);
 
   const emailSettings = useEmailStore(s => s.settings);
   const updateEmailSettings = useEmailStore(s => s.updateSettings);
@@ -63,8 +65,8 @@ export default function SettingsModal({ initialTab = 'appearance', onClose }: Pr
   const totalAttachments = boards.reduce((acc, b) => acc + (b.columns?.reduce((cAcc, c) => cAcc + (c.cards?.reduce((aAcc, a) => aAcc + (a.attachments?.length || 0), 0) || 0), 0) || 0), 0);
 
   const storageBytes = new Blob([
-    localStorage.getItem('worklane_data_v2') || '',
-    localStorage.getItem('worklane_notifs_v2') || '',
+    localStorage.getItem('worklane_data_v4') || '',
+    localStorage.getItem('worklane_notifs_v3') || '',
     localStorage.getItem('worklane_auth_v2') || '',
     localStorage.getItem('worklane_emails_v2') || '',
     localStorage.getItem('worklane_settings_v1') || '',

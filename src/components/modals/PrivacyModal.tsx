@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useWorkStore } from '../../store/useWorkStore';
 import { useNotifStore } from '../../store/useNotifStore';
 import { useEmailStore } from '../../store/useEmailStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { useToastStore } from '../../store/useToastStore';
 
 interface Props {
@@ -11,18 +12,21 @@ interface Props {
 }
 
 export default function PrivacyModal({ onClose }: Props) {
-  const boards = useWorkStore(s => s.boards);
+  const getVisibleBoards = useWorkStore(s => s.getVisibleBoards);
   const notifications = useNotifStore(s => s.notifications);
   const clearNotifications = useNotifStore(s => s.clearAll);
+  const user = useAuthStore(s => s.user);
   const showToast = useToastStore(s => s.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const boards = getVisibleBoards(user?.email);
 
   const totalCards = boards.reduce((acc, b) => acc + (b.columns?.reduce((cAcc, c) => cAcc + (c.cards?.length || 0), 0) || 0), 0);
   const totalAttachments = boards.reduce((acc, b) => acc + (b.columns?.reduce((cAcc, c) => cAcc + (c.cards?.reduce((aAcc, a) => aAcc + (a.attachments?.length || 0), 0) || 0), 0) || 0), 0);
 
   const storageBytes = new Blob([
-    localStorage.getItem('worklane_data_v2') || '',
-    localStorage.getItem('worklane_notifs_v2') || '',
+    localStorage.getItem('worklane_data_v4') || '',
+    localStorage.getItem('worklane_notifs_v3') || '',
     localStorage.getItem('worklane_auth_v2') || '',
     localStorage.getItem('worklane_emails_v2') || '',
   ]).size;

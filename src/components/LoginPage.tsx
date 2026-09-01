@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Lock, User, ArrowRight, Eye, EyeOff, X } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../store/useAuthStore';
 import { useToastStore } from '../store/useToastStore';
@@ -9,7 +9,6 @@ export default function LoginPage() {
   const signInWithEmail = useAuthStore(s => s.signInWithEmail);
   const signUpWithEmail = useAuthStore(s => s.signUpWithEmail);
   const signInWithGoogle = useAuthStore(s => s.signInWithGoogle);
-  const signUpWithGoogle = useAuthStore(s => s.signUpWithGoogle);
   const showToast = useToastStore(s => s.showToast);
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -18,11 +17,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Google Modal State
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [googleName, setGoogleName] = useState('Alex Rivera');
-  const [googleEmail, setGoogleEmail] = useState('alex.rivera@gmail.com');
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,32 +58,16 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleClick = async () => {
     setIsLoading(true);
     try {
-      if (mode === 'signup') {
-        const res = await signUpWithGoogle(googleName.trim() || 'Google User', googleEmail.trim());
-        if (!res.success) {
-          showToast(res.error || 'Google Sign Up failed', 'error');
-          setIsLoading(false);
-          return;
-        }
-        showToast('Google authentication initialized', 'success');
-        setShowGoogleModal(false);
-      } else {
-        const res = await signInWithGoogle(googleEmail.trim());
-        if (!res.success) {
-          showToast(res.error || 'Google Sign In failed', 'error');
-          setIsLoading(false);
-          return;
-        }
-        showToast('Signed in successfully', 'success');
-        setShowGoogleModal(false);
+      const res = await signInWithGoogle();
+      if (!res.success) {
+        showToast(res.error || 'Google Sign In failed', 'error');
+        setIsLoading(false);
       }
     } catch (err: any) {
       showToast(err.message || 'Google Auth error', 'error');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -145,7 +123,7 @@ export default function LoginPage() {
             type="button"
             className="btn btn-secondary"
             style={{ width: '100%', padding: '10px 14px', fontSize: 13 }}
-            onClick={() => setShowGoogleModal(true)}
+            onClick={handleGoogleClick}
             disabled={isLoading}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight: 6 }}>
@@ -280,55 +258,6 @@ export default function LoginPage() {
           </div>
         </div>
       </motion.div>
-
-      {/* Google Auth Modal */}
-      {showGoogleModal && (
-        <div className="modal-overlay" onClick={() => setShowGoogleModal(false)}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="modal small-modal"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h2 className="modal-title">Google Authentication</h2>
-              <motion.button whileTap={{ scale: 0.92 }} className="icon-btn" onClick={() => setShowGoogleModal(false)}><X size={15} /></motion.button>
-            </div>
-            <form onSubmit={handleGoogleSubmit} className="modal-body">
-              {mode === 'signup' && (
-                <div className="form-group">
-                  <label className="field-label">Google Account Name</label>
-                  <input
-                    type="text"
-                    className="text-input"
-                    value={googleName}
-                    onChange={e => setGoogleName(e.target.value)}
-                    required
-                  />
-                </div>
-              )}
-              <div className="form-group">
-                <label className="field-label">Google Email Address</label>
-                <input
-                  type="email"
-                  className="text-input"
-                  value={googleEmail}
-                  onChange={e => setGoogleEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-                <motion.button type="button" whileTap={{ scale: 0.95 }} className="btn btn-secondary" onClick={() => setShowGoogleModal(false)}>
-                  Cancel
-                </motion.button>
-                <motion.button type="submit" whileTap={{ scale: 0.95 }} className="btn btn-primary" disabled={isLoading}>
-                  {mode === 'signup' ? 'Sign Up with Google' : 'Sign In with Google'}
-                </motion.button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 }

@@ -57,30 +57,22 @@ export const useAuthStore = create<AuthState>()(
         if (!isSupabaseConfigured()) return;
         
         try {
+          const parseUser = (u: any): AuthUser => ({
+            id: u.id,
+            name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'User',
+            email: u.email || '',
+            avatarUrl: u.user_metadata?.avatar_url || u.user_metadata?.picture,
+            provider: (u.app_metadata?.provider as any) || (u.user_metadata?.provider as any) || 'email',
+          });
+
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
-            const u = session.user;
-            const authUser: AuthUser = {
-              id: u.id,
-              name: u.user_metadata?.name || u.email?.split('@')[0] || 'User',
-              email: u.email || '',
-              avatarUrl: u.user_metadata?.avatar_url,
-              provider: (u.app_metadata?.provider as any) || 'email',
-            };
-            set({ user: authUser, isAuthenticated: true });
+            set({ user: parseUser(session.user), isAuthenticated: true });
           }
 
           supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user) {
-              const u = session.user;
-              const authUser: AuthUser = {
-                id: u.id,
-                name: u.user_metadata?.name || u.email?.split('@')[0] || 'User',
-                email: u.email || '',
-                avatarUrl: u.user_metadata?.avatar_url,
-                provider: (u.app_metadata?.provider as any) || 'email',
-              };
-              set({ user: authUser, isAuthenticated: true });
+              set({ user: parseUser(session.user), isAuthenticated: true });
             } else if (!session && isSupabaseConfigured()) {
               set({ user: null, isAuthenticated: false });
             }

@@ -346,10 +346,19 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                               title="Delete board"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`Delete board "${board.name}" and all its tasks?`)) {
-                                  deleteBoard(board.id);
-                                  showToast(`Deleted board "${board.name}"`, 'info');
-                                }
+                                showToast(
+                                  `Delete board "${board.name}" and all its tasks?`,
+                                  'warning',
+                                  6000,
+                                  {
+                                    label: 'Delete Board',
+                                    variant: 'danger',
+                                    onClick: () => {
+                                      deleteBoard(board.id);
+                                      showToast(`Deleted board "${board.name}"`, 'info');
+                                    }
+                                  }
+                                );
                               }}
                             >
                               <Trash2 size={13} />
@@ -363,9 +372,22 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                               title="Leave board"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (user?.email && window.confirm(`Leave board "${board.name}"?`)) {
-                                  leaveBoard(board.id, user.email);
-                                  showToast(`You left "${board.name}"`, 'info');
+                                if (user?.email) {
+                                  showToast(
+                                    `Leave board "${board.name}"?`,
+                                    'warning',
+                                    6000,
+                                    {
+                                      label: 'Leave Board',
+                                      variant: 'danger',
+                                      onClick: () => {
+                                        if (user?.email) {
+                                          leaveBoard(board.id, user.email);
+                                          showToast(`You left "${board.name}"`, 'info');
+                                        }
+                                      }
+                                    }
+                                  );
                                 }
                               }}
                             >

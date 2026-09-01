@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   KanbanSquare, List, Calendar, Users, BellRing,
   Mail, Shield, Plus, X, ChevronLeft, ChevronRight,
@@ -40,8 +40,9 @@ export default function Sidebar({
   onGoToDashboard, onSelectBoard,
   collapsed, onToggleCollapse,
 }: Props) {
-  const getVisibleBoards = useWorkStore(s => s.getVisibleBoards);
+  const allBoards        = useWorkStore(s => s.boards);
   const activeBoardId    = useWorkStore(s => s.activeBoardId);
+  const getVisibleBoards = useWorkStore(s => s.getVisibleBoards);
   const deleteBoard      = useWorkStore(s => s.deleteBoard);
   const leaveBoard       = useWorkStore(s => s.leaveBoard);
   const user             = useAuthStore(s => s.user);
@@ -51,11 +52,11 @@ export default function Sidebar({
   const showToast        = useToastStore(s => s.showToast);
   const showConfirm      = useConfirmStore(s => s.showConfirm);
 
-  const boards = getVisibleBoards(user?.email);
+  const boards = useMemo(() => getVisibleBoards(user?.email), [allBoards, user?.email, getVisibleBoards]);
   const isDark  = useThemeStore(s => s.isDark);
   const toggleTheme = useThemeStore(s => s.toggle);
 
-  const activeBoard = useWorkStore.getState().getActiveBoard();
+  const activeBoard = useMemo(() => allBoards.find(b => b.id === activeBoardId), [allBoards, activeBoardId]);
   const teamMembers = activeBoard?.members ?? [];
 
   // ── Collapsed Sidebar ──

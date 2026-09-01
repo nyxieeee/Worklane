@@ -3,6 +3,7 @@ import { MoreHorizontal, Plus, Edit3, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useToastStore } from '../store/useToastStore';
+import { useConfirmStore } from '../store/useConfirmStore';
 import type { Column as ColType } from '../types';
 import CardComponent from './Card';
 
@@ -38,6 +39,7 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
   const moveCard           = useWorkStore(s => s.moveCard);
   const undoLastMove       = useWorkStore(s => s.undoLastMove);
   const showToast          = useToastStore(s => s.showToast);
+  const showConfirm        = useConfirmStore(s => s.showConfirm);
 
   const [showAddCard,   setShowAddCard]   = useState(false);
   const [newCardTitle,  setNewCardTitle]  = useState('');
@@ -181,24 +183,19 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
                     style={{ width: '100%', fontSize: 12.5, color: 'hsl(var(--destructive))', whiteSpace: 'nowrap' }}
                     onClick={() => {
                       setMenuOpen(false);
-                      if (col.cards.length > 0) {
-                        showToast(
-                          `Delete column "${col.name}" and all its ${col.cards.length} card(s)?`,
-                          'warning',
-                          6000,
-                          {
-                            label: 'Delete Column',
-                            variant: 'danger',
-                            onClick: () => {
-                              deleteColumn(col.id);
-                              showToast('Column deleted', 'info');
-                            }
-                          }
-                        );
-                      } else {
-                        deleteColumn(col.id);
-                        showToast('Column deleted', 'info');
-                      }
+                      showConfirm({
+                        title: `Delete Column "${col.name}"?`,
+                        message: col.cards.length > 0
+                          ? `Are you sure you want to delete this column and its ${col.cards.length} task(s)? This action cannot be undone.`
+                          : `Are you sure you want to delete this column?`,
+                        confirmText: 'Delete Column',
+                        variant: 'danger',
+                        icon: 'trash',
+                        onConfirm: () => {
+                          deleteColumn(col.id);
+                          showToast(`Deleted column "${col.name}"`, 'info');
+                        }
+                      });
                     }}
                   >
                     <Trash2 size={13} />

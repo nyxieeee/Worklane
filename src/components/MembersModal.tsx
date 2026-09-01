@@ -3,6 +3,7 @@ import { X, UserPlus, Camera, Trash2, LogOut } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useToastStore } from '../store/useToastStore';
+import { useConfirmStore } from '../store/useConfirmStore';
 import { useNotifStore } from '../store/useNotifStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useEmailStore } from '../store/useEmailStore';
@@ -19,6 +20,7 @@ export default function MembersModal({ onClose }: Props) {
   const removeMember = useWorkStore(s => s.removeMember);
   const leaveBoard = useWorkStore(s => s.leaveBoard);
   const showToast = useToastStore(s => s.showToast);
+  const showConfirm = useConfirmStore(s => s.showConfirm);
   const currentUser = useAuthStore(s => s.user);
 
   const [name, setName] = useState('');
@@ -27,9 +29,10 @@ export default function MembersModal({ onClose }: Props) {
 
   if (!board) return null;
 
+  const members = board.members || [];
   const currentEmail = currentUser?.email?.toLowerCase().trim();
   const isOwner = board.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail;
-  const isMember = board.members.some(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
+  const isMember = members.some(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>, memberId?: string) => {
     const file = e.target.files?.[0];
@@ -91,20 +94,18 @@ export default function MembersModal({ onClose }: Props) {
 
   const handleLeaveBoard = () => {
     if (!currentEmail) return;
-    showToast(
-      `Leave board "${board.name}"? You will lose access unless re-invited.`,
-      'warning',
-      6000,
-      {
-        label: 'Leave Board',
-        variant: 'danger',
-        onClick: () => {
-          leaveBoard(board.id, currentEmail);
-          showToast(`You left board "${board.name}"`, 'info');
-          onClose();
-        }
+    showConfirm({
+      title: `Leave "${board.name}"?`,
+      message: `Are you sure you want to leave this board? You will lose access unless re-invited.`,
+      confirmText: 'Leave Board',
+      variant: 'danger',
+      icon: 'logout',
+      onConfirm: () => {
+        leaveBoard(board.id, currentEmail);
+        showToast(`You left board "${board.name}"`, 'info');
+        onClose();
       }
-    );
+    });
   };
 
   return (
@@ -114,27 +115,33 @@ export default function MembersModal({ onClose }: Props) {
         animate={{ opacity: 1, scale: 1, rotateX: 0, translateZ: 0 }}
         exit={{ opacity: 0, scale: 0.94, rotateX: 12, translateZ: -50 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="modal"
-        style={{ maxWidth: 480, transformStyle: 'preserve-3d' }}
+        className="modal small-modal"
+        style={{ transformStyle: 'preserve-3d' }}
         onClick={e => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 className="modal-title">Team Members</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 className="modal-title">Board Members</h2>
+            <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', backgroundColor: 'hsl(var(--card))', boxShadow: 'var(--neu-shadow-input)', padding: '2px 8px', borderRadius: 9999 }}>
+              {members.length}
+            </span>
+          </div>
           <motion.button whileTap={{ scale: 0.92 }} className="icon-btn" onClick={onClose}><X size={15} /></motion.button>
         </div>
 
         <div className="modal-body">
-          {/* Current Members */}
-          <div className="form-group">
-            <label className="field-label">Current Members ({board.members.length})</label>
-            {board.members.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: 'hsl(var(--muted-foreground))' }}>No members yet.</div>
+          {/* Current Members List */}
+          <div>
+            <label className="field-label" style={{ marginBottom: 10, display: 'block' }}>Current Team</label>
+            {members.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: 'hsl(var(--muted-foreground))', fontSize: 13 }}>
+                No members yet
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto', padding: '6px 4px', margin: '-6px -4px' }}>
-                {board.members.map(m => {
-                  const isCurrent = m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail;
-                  const isBoardCreator = board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim();
-                  const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {members.map(m => {
+                  const isCurrent = currentEmail && m.email && m.email.toLowerCase().trim() === currentEmail;
+                  const isMemberOwner = board.createdBy && m.email && m.email.toLowerCase().trim() === board.createdBy.toLowerCase().trim();
 
                   return (
                     <div
@@ -142,84 +149,62 @@ export default function MembersModal({ onClose }: Props) {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 10,
+                        gap: 12,
                         padding: '8px 12px',
                         borderRadius: 'var(--radius)',
+                        backgroundColor: 'hsl(var(--card))',
                         boxShadow: 'var(--neu-shadow-raised-sm)',
-                        backgroundColor: 'hsl(var(--card))'
                       }}
                     >
-                      <div style={{ position: 'relative' }}>
-                        {m.avatarUrl ? (
-                          <img
-                            src={m.avatarUrl}
-                            alt={displayName}
-                            style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: '50%',
-                              backgroundColor: m.color,
-                              color: '#fff',
-                              fontSize: 11,
-                              fontWeight: 700,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
-                            {avatarInitials(displayName)}
-                          </div>
-                        )}
-                        {isCurrent && (
-                          <>
-                            <label
-                              htmlFor={`member-photo-${m.id}`}
-                              style={{
-                                position: 'absolute',
-                                bottom: -2,
-                                right: -2,
-                                backgroundColor: 'hsl(var(--card))',
-                                boxShadow: 'var(--neu-shadow-raised-sm)',
-                                borderRadius: '50%',
-                                width: 16,
-                                height: 16,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer'
-                              }}
-                              title="Change photo"
-                            >
-                              <Camera size={9} color="hsl(var(--primary))" />
-                            </label>
-                            <input
-                              type="file"
-                              id={`member-photo-${m.id}`}
-                              accept="image/*"
-                              style={{ display: 'none' }}
-                              onChange={e => handleAvatarUpload(e, m.id)}
-                            />
-                          </>
-                        )}
-                      </div>
+                      {/* Avatar */}
+                      {m.avatarUrl ? (
+                        <img
+                          src={m.avatarUrl}
+                          alt={m.name}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            flexShrink: 0,
+                            boxShadow: 'var(--neu-shadow-raised-sm)'
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            backgroundColor: m.color || '#6366f1',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            flexShrink: 0,
+                            boxShadow: 'var(--neu-shadow-raised-sm)'
+                          }}
+                        >
+                          {avatarInitials(m.name)}
+                        </div>
+                      )}
 
+                      {/* Info */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>
-                            {displayName}
+                            {m.name}
                           </span>
-                          {isCurrent && (
-                            <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', fontWeight: 600 }}>
-                              You
+                          {isMemberOwner && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))' }}>
+                              Owner
                             </span>
                           )}
-                          {isBoardCreator && (
-                            <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))', fontWeight: 600 }}>
-                              Owner
+                          {isCurrent && !isMemberOwner && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, backgroundColor: 'hsl(var(--card))', boxShadow: 'var(--neu-shadow-input)', color: 'hsl(var(--muted-foreground))' }}>
+                              You
                             </span>
                           )}
                         </div>
@@ -230,9 +215,9 @@ export default function MembersModal({ onClose }: Props) {
                         )}
                       </div>
 
-                      {/* Action: Leave if non-owner current user, or remove if owner */}
+                      {/* Actions */}
                       {isCurrent ? (
-                        !isBoardCreator && !isOwner ? (
+                        !isMemberOwner ? (
                           <motion.button
                             whileTap={{ scale: 0.9 }}
                             className="icon-btn"
@@ -251,19 +236,17 @@ export default function MembersModal({ onClose }: Props) {
                             style={{ color: 'hsl(var(--destructive))' }}
                             title="Remove Member"
                             onClick={() => {
-                              showToast(
-                                `Remove ${m.name} from this board?`,
-                                'warning',
-                                6000,
-                                {
-                                  label: 'Remove',
-                                  variant: 'danger',
-                                  onClick: () => {
-                                    removeMember(m.id);
-                                    showToast(`${m.name} removed`, 'info');
-                                  }
+                              showConfirm({
+                                title: `Remove "${m.name}"?`,
+                                message: `Are you sure you want to remove ${m.name} from this board? They will lose access to all tasks.`,
+                                confirmText: 'Remove Member',
+                                variant: 'danger',
+                                icon: 'trash',
+                                onConfirm: () => {
+                                  removeMember(m.id);
+                                  showToast(`${m.name} removed`, 'info');
                                 }
-                              );
+                              });
                             }}
                           >
                             <Trash2 size={14} />

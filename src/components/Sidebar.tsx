@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { useToastStore } from '../store/useToastStore';
+import { useConfirmStore } from '../store/useConfirmStore';
 import { avatarInitials } from '../utils';
 import sidebarImg from '../assets/sidebar.png';
 import sidebarDarkImg from '../assets/sidebar-dark.png';
@@ -48,6 +49,7 @@ export default function Sidebar({
   const labelMode        = useSettingsStore(s => s.labelMode);
   const setLabelMode     = useSettingsStore(s => s.setLabelMode);
   const showToast        = useToastStore(s => s.showToast);
+  const showConfirm      = useConfirmStore(s => s.showConfirm);
 
   const boards = getVisibleBoards(user?.email);
   const isDark  = useThemeStore(s => s.isDark);
@@ -250,19 +252,17 @@ export default function Sidebar({
                         title="Delete Board"
                         onClick={(e) => {
                           e.stopPropagation();
-                          showToast(
-                            `Delete board "${b.name}" and all its tasks?`,
-                            'warning',
-                            6000,
-                            {
-                              label: 'Delete Board',
-                              variant: 'danger',
-                              onClick: () => {
-                                deleteBoard(b.id);
-                                showToast(`Deleted board "${b.name}"`, 'info');
-                              }
+                          showConfirm({
+                            title: `Delete "${b.name}"?`,
+                            message: `Are you sure you want to permanently delete this board and all its tasks? This action cannot be undone.`,
+                            confirmText: 'Delete Board',
+                            variant: 'danger',
+                            icon: 'trash',
+                            onConfirm: () => {
+                              deleteBoard(b.id);
+                              showToast(`Deleted board "${b.name}"`, 'info');
                             }
-                          );
+                          });
                         }}
                       >
                         <X size={12} />
@@ -275,21 +275,19 @@ export default function Sidebar({
                         onClick={(e) => {
                           e.stopPropagation();
                           if (user?.email) {
-                            showToast(
-                              `Leave board "${b.name}"?`,
-                              'warning',
-                              6000,
-                              {
-                                label: 'Leave Board',
-                                variant: 'danger',
-                                onClick: () => {
-                                  if (user?.email) {
-                                    leaveBoard(b.id, user.email);
-                                    showToast(`You left "${b.name}"`, 'info');
-                                  }
+                            showConfirm({
+                              title: `Leave "${b.name}"?`,
+                              message: `Are you sure you want to leave this board? You will need an invite from the owner to rejoin.`,
+                              confirmText: 'Leave Board',
+                              variant: 'danger',
+                              icon: 'logout',
+                              onConfirm: () => {
+                                if (user?.email) {
+                                  leaveBoard(b.id, user.email);
+                                  showToast(`You left "${b.name}"`, 'info');
                                 }
                               }
-                            );
+                            });
                           }
                         }}
                       >

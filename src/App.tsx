@@ -15,6 +15,7 @@ import AddColumnModal from './components/modals/AddColumnModal';
 import SearchModal from './components/modals/SearchModal';
 import PrivacyModal from './components/modals/PrivacyModal';
 import SettingsModal from './components/modals/SettingsModal';
+import ConfirmModal from './components/modals/ConfirmModal';
 import { useWorkStore } from './store/useWorkStore';
 import { useNotifStore } from './store/useNotifStore';
 import { useEmailStore } from './store/useEmailStore';
@@ -421,6 +422,9 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
 
       {/* Toasts */}
       <Toast />
+
+      {/* Global Centered Confirmation Dialog */}
+      <ConfirmModal />
     </div>
   );
 }

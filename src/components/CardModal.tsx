@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useToastStore } from '../store/useToastStore';
+import { useConfirmStore } from '../store/useConfirmStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { LABELS, type Attachment } from '../types';
@@ -30,6 +31,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const removeAttachment = useWorkStore(s => s.removeAttachment);
   const addComment = useWorkStore(s => s.addComment);
   const showToast = useToastStore(s => s.showToast);
+  const showConfirm = useConfirmStore(s => s.showConfirm);
   const customLabels = useSettingsStore(s => s.customLabels);
   const addCustomLabel = useSettingsStore(s => s.addLabel);
 
@@ -83,20 +85,18 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   };
 
   const handleDeleteCard = () => {
-    showToast(
-      `Delete task "${card.title}" permanently?`,
-      'warning',
-      6000,
-      {
-        label: 'Delete Task',
-        variant: 'danger',
-        onClick: () => {
-          deleteCard(cardId);
-          showToast('Task deleted', 'info');
-          onClose();
-        }
+    showConfirm({
+      title: `Delete "${card.title}"?`,
+      message: `Are you sure you want to permanently delete this task and all its attachments and comments? This action cannot be undone.`,
+      confirmText: 'Delete Task',
+      variant: 'danger',
+      icon: 'trash',
+      onConfirm: () => {
+        deleteCard(cardId);
+        showToast('Task deleted', 'info');
+        onClose();
       }
-    );
+    });
   };
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB

@@ -9,6 +9,7 @@ import { useWorkStore } from '../store/useWorkStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNotifStore } from '../store/useNotifStore';
 import { useToastStore } from '../store/useToastStore';
+import { useConfirmStore } from '../store/useConfirmStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { formatDueDate, avatarInitials } from '../utils';
 import { LABELS, type Card, type Board } from '../types';
@@ -51,6 +52,7 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
   const toggleCardComplete = useWorkStore(s => s.toggleCardComplete);
   const rawNotifications   = useNotifStore(s => s.notifications);
   const showToast          = useToastStore(s => s.showToast);
+  const showConfirm        = useConfirmStore(s => s.showConfirm);
   const customLabels       = useSettingsStore(s => s.customLabels);
 
   const allLabels = useMemo(() => [...LABELS, ...customLabels], [customLabels]);
@@ -346,19 +348,17 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                               title="Delete board"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                showToast(
-                                  `Delete board "${board.name}" and all its tasks?`,
-                                  'warning',
-                                  6000,
-                                  {
-                                    label: 'Delete Board',
-                                    variant: 'danger',
-                                    onClick: () => {
-                                      deleteBoard(board.id);
-                                      showToast(`Deleted board "${board.name}"`, 'info');
-                                    }
+                                showConfirm({
+                                  title: `Delete "${board.name}"?`,
+                                  message: `Are you sure you want to permanently delete this board and all its tasks? This action cannot be undone.`,
+                                  confirmText: 'Delete Board',
+                                  variant: 'danger',
+                                  icon: 'trash',
+                                  onConfirm: () => {
+                                    deleteBoard(board.id);
+                                    showToast(`Deleted board "${board.name}"`, 'info');
                                   }
-                                );
+                                });
                               }}
                             >
                               <Trash2 size={13} />
@@ -373,21 +373,19 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (user?.email) {
-                                  showToast(
-                                    `Leave board "${board.name}"?`,
-                                    'warning',
-                                    6000,
-                                    {
-                                      label: 'Leave Board',
-                                      variant: 'danger',
-                                      onClick: () => {
-                                        if (user?.email) {
-                                          leaveBoard(board.id, user.email);
-                                          showToast(`You left "${board.name}"`, 'info');
-                                        }
+                                  showConfirm({
+                                    title: `Leave "${board.name}"?`,
+                                    message: `Are you sure you want to leave this board? You will need an invite from the owner to rejoin.`,
+                                    confirmText: 'Leave Board',
+                                    variant: 'danger',
+                                    icon: 'logout',
+                                    onConfirm: () => {
+                                      if (user?.email) {
+                                        leaveBoard(board.id, user.email);
+                                        showToast(`You left "${board.name}"`, 'info');
                                       }
                                     }
-                                  );
+                                  });
                                 }
                               }}
                             >

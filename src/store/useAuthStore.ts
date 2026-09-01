@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabaseService } from '../services/supabaseService';
 
 export interface AuthUser {
   id: string;
@@ -67,12 +68,16 @@ export const useAuthStore = create<AuthState>()(
 
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
-            set({ user: parseUser(session.user), isAuthenticated: true });
+            const parsed = parseUser(session.user);
+            set({ user: parsed, isAuthenticated: true });
+            supabaseService.upsertProfile(parsed);
           }
 
           supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user) {
-              set({ user: parseUser(session.user), isAuthenticated: true });
+              const parsed = parseUser(session.user);
+              set({ user: parsed, isAuthenticated: true });
+              supabaseService.upsertProfile(parsed);
             } else if (!session && isSupabaseConfigured()) {
               set({ user: null, isAuthenticated: false });
             }

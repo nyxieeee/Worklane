@@ -1,8 +1,8 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import type { Board, Column, Card, Comment, Attachment, Member } from '../types';
+import type { Board, Column, Card, Comment, Attachment, Member, Notification } from '../types';
 
 /**
- * Service to interact with Supabase database and storage
+ * Service to interact with Supabase database, storage, and notifications
  */
 export const supabaseService = {
   /**
@@ -13,7 +13,25 @@ export const supabaseService = {
   },
 
   /**
-   * Fetch all boards for authenticated user
+   * Upsert current user profile (with Google avatar URL & name)
+   */
+  async upsertProfile(user: { id: string; name?: string; email: string; avatarUrl?: string }): Promise<void> {
+    if (!isSupabaseConfigured() || !user?.email) return;
+    try {
+      await supabase.from('profiles').upsert({
+        id: user.id,
+        name: user.name || user.email.split('@')[0],
+        email: user.email.toLowerCase().trim(),
+        avatar_url: user.avatarUrl || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+    } catch (err) {
+      console.warn('[SupabaseService] Error upserting profile:', err);
+    }
+  },
+
+  /**
+   * Fetch all boards for authenticated user, enriched with real member profile pictures
    */
   async getBoardsForUser(email: string): Promise<Board[]> {
     if (!isSupabaseConfigured() || !email) return [];
@@ -21,13 +39,13 @@ export const supabaseService = {
     try {
       const cleanEmail = email.toLowerCase().trim();
 
-      // 1. Query boards table directly (RLS returns boards user owns or belongs to)
+      // 1. Query boards table directly
       let { data: boardsData, error: boardsErr } = await supabase
         .from('boards')
         .select('*')
         .order('created_at', { ascending: true });
 
-      // Fallback: If RLS query returned empty, try explicit creator/member filter
+      // Fallback query if needed
       if ((!boardsData || boardsData.length === 0) && !boardsErr) {
         const { data: memberRows } = await supabase
           .from('board_members')
@@ -59,17 +77,27 @@ export const supabaseService = {
 
       const boardIds = boardsData.map(b => b.id);
 
-      // 2. Fetch all members, columns, and cards for these boards
-      const [membersRes, colsRes, cardsRes] = await Promise.all([
+      // 2. Fetch all members, columns, cards, and registered user profiles
+      const [membersRes, colsRes, cardsRes, profilesRes] = await Promise.all([
         supabase.from('board_members').select('*').in('board_id', boardIds),
         supabase.from('columns').select('*').in('board_id', boardIds).order('position'),
-        supabase.from('cards').select('*').in('board_id', boardIds).order('position')
+        supabase.from('cards').select('*').in('board_id', boardIds).order('position'),
+        supabase.from('profiles').select('email, name, avatar_url')
       ]);
 
       const allMembers = membersRes.data || [];
       const allCols = colsRes.data || [];
       const allCards = cardsRes.data || [];
+      const allProfiles = profilesRes.data || [];
       const cardIds = allCards.map(c => c.id);
+
+      // Map registered profiles by lowercase email for fast avatar lookup
+      const profileMap = new Map<string, { name?: string; avatar_url?: string }>();
+      allProfiles.forEach(p => {
+        if (p.email) {
+          profileMap.set(p.email.toLowerCase().trim(), p);
+        }
+      });
 
       // 3. Fetch card children
       let allAssignees: any[] = [];
@@ -95,13 +123,18 @@ export const supabaseService = {
       const assembledBoards: Board[] = boardsData.map(b => {
         const bMembers: Member[] = allMembers
           .filter(m => m.board_id === b.id)
-          .map(m => ({
-            id: m.id,
-            name: m.name,
-            email: m.email,
-            color: m.color || '#6366f1',
-            avatarUrl: m.avatar_url || undefined,
-          }));
+          .map(m => {
+            const mCleanEmail = m.email ? m.email.toLowerCase().trim() : '';
+            const realProfile = profileMap.get(mCleanEmail);
+
+            return {
+              id: m.id,
+              name: realProfile?.name || m.name,
+              email: m.email,
+              color: m.color || '#6366f1',
+              avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
+            };
+          });
 
         const bColumns: Column[] = allCols
           .filter(c => c.board_id === b.id)
@@ -197,7 +230,7 @@ export const supabaseService = {
       }, { onConflict: 'id' });
 
       if (bErr) {
-        console.error('[SupabaseService] Error syncing board:', bErr);
+        console.error('[SupabaseService] Error syncing board table:', bErr);
         return false;
       }
 
@@ -211,7 +244,7 @@ export const supabaseService = {
           color: m.color,
           avatar_url: m.avatarUrl || null,
         }));
-        const { error: mErr } = await supabase.from('board_members').upsert(memberRows, { onConflict: 'id' });
+        const { error: mErr } = await supabase.from('board_members').upsert(memberRows, { onConflict: 'board_id,email' });
         if (mErr) console.warn('[SupabaseService] Member upsert warning:', mErr);
       }
 
@@ -354,14 +387,27 @@ export const supabaseService = {
   async addMember(boardId: string, member: Member): Promise<boolean> {
     if (!isSupabaseConfigured() || !boardId || !member?.email) return false;
     try {
+      const cleanEmail = member.email.toLowerCase().trim();
+
+      // Look up if user already has a real avatar registered in profiles
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('avatar_url, name')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      const finalAvatar = prof?.avatar_url || member.avatarUrl || null;
+      const finalName = prof?.name || member.name;
+
       const { error } = await supabase.from('board_members').upsert({
         id: member.id,
         board_id: boardId,
-        name: member.name,
-        email: member.email.toLowerCase().trim(),
+        name: finalName,
+        email: cleanEmail,
         color: member.color,
-        avatar_url: member.avatarUrl || null,
-      }, { onConflict: 'id' });
+        avatar_url: finalAvatar,
+      }, { onConflict: 'board_id,email' });
+
       if (error) {
         console.error('[SupabaseService] Error adding member directly:', error);
         return false;
@@ -389,7 +435,77 @@ export const supabaseService = {
   },
 
   /**
-   * Upload file to Supabase Storage bucket (Private with Signed URLs)
+   * Cloud Notifications: Push a notification to Supabase for the recipient
+   */
+  async createNotification(notif: Notification): Promise<boolean> {
+    if (!isSupabaseConfigured() || !notif.recipientEmail) return false;
+    try {
+      const { error } = await supabase.from('notifications').insert({
+        id: notif.id,
+        recipient_email: notif.recipientEmail.toLowerCase().trim(),
+        title: notif.title,
+        sub: notif.sub,
+        icon: notif.icon || 'bell',
+        card_id: notif.cardId || null,
+        board_id: notif.boardId || null,
+        time: notif.time || new Date().toISOString(),
+        is_read: false,
+      });
+      if (error) {
+        console.warn('[SupabaseService] Notification insert error:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Notification insert exception:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Cloud Notifications: Fetch notifications for this user from Supabase
+   */
+  async getNotificationsForUser(email: string): Promise<Notification[]> {
+    if (!isSupabaseConfigured() || !email) return [];
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .ilike('recipient_email', email.toLowerCase().trim())
+        .order('time', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      return (data || []).map(r => ({
+        id: r.id,
+        title: r.title,
+        sub: r.sub,
+        icon: r.icon,
+        cardId: r.card_id,
+        boardId: r.board_id,
+        recipientEmail: r.recipient_email,
+        time: r.time,
+      }));
+    } catch (err) {
+      console.warn('[SupabaseService] Error fetching notifications:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Cloud Notifications: Clear all notifications for user
+   */
+  async clearNotifications(email: string): Promise<void> {
+    if (!isSupabaseConfigured() || !email) return;
+    try {
+      await supabase.from('notifications').delete().ilike('recipient_email', email.toLowerCase().trim());
+    } catch (err) {
+      console.warn('[SupabaseService] Error clearing notifications:', err);
+    }
+  },
+
+  /**
+   * Upload file to Supabase Storage bucket
    */
   async uploadAttachment(file: File, path: string, expiresInSeconds: number = 60 * 60 * 24 * 7): Promise<string | null> {
     if (!isSupabaseConfigured()) return null;
@@ -433,37 +549,48 @@ export const supabaseService = {
   },
 
   /**
-   * Subscribe to realtime database changes for all boards
+   * Subscribe to realtime database changes (boards, cards, columns, notifications)
    */
-  subscribeToAllBoards(onUpdate: () => void) {
+  subscribeToAll(userEmail: string, onBoardsChange: () => void, onNotifsChange: () => void) {
     if (!isSupabaseConfigured()) return () => {};
 
+    const cleanEmail = userEmail ? userEmail.toLowerCase().trim() : '';
+
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel(`realtime-sync-${cleanEmail || 'anon'}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'boards' },
-        () => onUpdate()
+        () => onBoardsChange()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'board_members' },
-        () => onUpdate()
+        () => onBoardsChange()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'columns' },
-        () => onUpdate()
+        () => onBoardsChange()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'cards' },
-        () => onUpdate()
+        () => onBoardsChange()
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'comments' },
-        () => onUpdate()
+        () => onBoardsChange()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        (payload) => {
+          if (payload.new && (!cleanEmail || payload.new.recipient_email?.toLowerCase().trim() === cleanEmail)) {
+            onNotifsChange();
+          }
+        }
       )
       .subscribe();
 

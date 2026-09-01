@@ -39,6 +39,7 @@ export default function App() {
   const updateCard = useWorkStore(s => s.updateCard);
   const syncCurrentUserProfile = useWorkStore(s => s.syncCurrentUserProfile);
   const loadBoardsFromCloud = useWorkStore(s => s.loadBoardsFromCloud);
+  const loadNotificationsFromCloud = useNotifStore(s => s.loadNotificationsFromCloud);
   const addNotification = useNotifStore(s => s.addNotification);
   const isDark = useThemeStore(s => s.isDark);
   const currentUser = useAuthStore(s => s.user);
@@ -48,25 +49,31 @@ export default function App() {
     initializeAuth();
   }, [initializeAuth]);
 
-  // Load cloud boards when user is logged in
+  // Load cloud boards & notifications when user is logged in
   useEffect(() => {
     if (currentUser?.email) {
       loadBoardsFromCloud(currentUser.email);
+      loadNotificationsFromCloud(currentUser.email);
     }
-  }, [currentUser?.email, loadBoardsFromCloud]);
+  }, [currentUser?.email, loadBoardsFromCloud, loadNotificationsFromCloud]);
 
-  // Realtime subscription: auto-refresh boards when changes happen on Supabase
+  // Realtime subscription: auto-refresh boards & notifications when changes happen on Supabase
   useEffect(() => {
     if (!currentUser?.email) return;
-    const unsub = supabaseService.subscribeToAllBoards(() => {
-      if (currentUser?.email) {
-        loadBoardsFromCloud(currentUser.email);
+    const email = currentUser.email;
+    const unsub = supabaseService.subscribeToAll(
+      email,
+      () => {
+        loadBoardsFromCloud(email);
+      },
+      () => {
+        loadNotificationsFromCloud(email);
       }
-    });
+    );
     return () => {
       unsub();
     };
-  }, [currentUser?.email, loadBoardsFromCloud]);
+  }, [currentUser?.email, loadBoardsFromCloud, loadNotificationsFromCloud]);
 
   // Sync user profile name with board memberships
   useEffect(() => {

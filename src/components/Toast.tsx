@@ -21,12 +21,11 @@ export default function Toast() {
         {toasts.map(t => (
           <motion.div
             key={t.id}
-            initial={{ opacity: 0, y: 20, scale: 0.92, rotateX: 12 }}
-            animate={{ opacity: 1, y: 0, scale: 1, rotateX: 0 }}
-            exit={{ opacity: 0, y: 15, scale: 0.92, rotateX: -10 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className={`toast ${t.type}`}
-            style={{ transformStyle: 'preserve-3d' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               {iconMap[t.type]}

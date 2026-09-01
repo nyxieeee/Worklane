@@ -167,22 +167,47 @@ export default function App() {
     }
   }, []);
 
+const ALERTED_SOON_KEY = 'worklane_alerted_soon_v1';
+const ALERTED_OVERDUE_KEY = 'worklane_alerted_overdue_v1';
+
+function getAlertedSet(key: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveAlertedSet(key: string, setObj: Set<string>) {
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.from(setObj).slice(-300)));
+  } catch {
+    // ignore
+  }
+}
+
   // Due-date checker
   const checkDueDates = useCallback(() => {
     const now = new Date();
     const storeBoards = useWorkStore.getState().boards;
+    const alertedSoon = getAlertedSet(ALERTED_SOON_KEY);
+    const alertedOverdue = getAlertedSet(ALERTED_OVERDUE_KEY);
+    let soonChanged = false;
+    let overdueChanged = false;
+
     storeBoards.forEach(board => {
       board.columns?.forEach(col => {
         col.cards?.forEach(card => {
           if (!card.dueDate || card.completed) return;
           const due = new Date(card.dueDate);
           const diff = due.getTime() - now.getTime();
-          const alerted24Key = `alerted24_${card.id}`;
-          const alertedODKey  = `alertedOD_${card.id}`;
+          const alertId = `${card.id}_${card.dueDate}`;
 
           // If due within 24h and not yet overdue
-          if (diff > 0 && diff < 86400000 && !(card as any)[alerted24Key]) {
-            updateCard(card.id, { [alerted24Key]: true });
+          if (diff > 0 && diff < 86400000 && !alertedSoon.has(alertId)) {
+            alertedSoon.add(alertId);
+            soonChanged = true;
 
             const targetRecipients = (card.assignees && card.assignees.length > 0)
               ? (card.assignees || []).map(mId => board.members?.find(m => m.id === mId)).filter(Boolean)
@@ -206,8 +231,9 @@ export default function App() {
           }
 
           // If overdue (diff <= 0)
-          if (diff <= 0 && !(card as any)[alertedODKey]) {
-            updateCard(card.id, { [alertedODKey]: true });
+          if (diff <= 0 && !alertedOverdue.has(alertId)) {
+            alertedOverdue.add(alertId);
+            overdueChanged = true;
 
             const targetRecipients = (card.assignees && card.assignees.length > 0)
               ? (card.assignees || []).map(mId => board.members?.find(m => m.id === mId)).filter(Boolean)
@@ -232,7 +258,10 @@ export default function App() {
         });
       });
     });
-  }, [addNotification, updateCard]);
+
+    if (soonChanged) saveAlertedSet(ALERTED_SOON_KEY, alertedSoon);
+    if (overdueChanged) saveAlertedSet(ALERTED_OVERDUE_KEY, alertedOverdue);
+  }, [addNotification]);
 
   useEffect(() => {
     checkDueDates();

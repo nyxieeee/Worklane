@@ -369,13 +369,8 @@ export const useWorkStore = create<WorkState>()(
 
           if (!tb) return s;
 
-          const extraPatch = 'dueDate' in patch ? {
-            [`alerted24_${cardId}`]: false,
-            [`alertedOD_${cardId}`]: false,
-          } : {};
-
           const updatedBoards = updateBoards(s.boards, tb.id, b =>
-            updateCardInBoard(b, cardId, c => ({ ...c, ...patch, ...extraPatch }))
+            updateCardInBoard(b, cardId, c => ({ ...c, ...patch }))
           );
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };

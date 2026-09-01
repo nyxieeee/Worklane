@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   KanbanSquare, Plus, CheckSquare, Clock,
   Layers, Zap, CheckCircle2,
@@ -9,6 +9,7 @@ import { useWorkStore } from '../store/useWorkStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useNotifStore } from '../store/useNotifStore';
 import { useToastStore } from '../store/useToastStore';
+import { useSettingsStore } from '../store/useSettingsStore';
 import { formatDueDate, avatarInitials } from '../utils';
 import { LABELS, type Card, type Board } from '../types';
 import Tilt3D from './ui/Tilt3D';
@@ -42,14 +43,6 @@ const item3DVariants: Variants = {
 
 type TaskFilter = 'all' | 'assigned' | 'dueSoon' | 'urgent' | 'completed';
 
-function getLabelInfo(lblId: string) {
-  const found = LABELS.find(l => l.id === lblId);
-  if (found) {
-    return { label: found.name, color: found.color };
-  }
-  return { label: lblId, color: '#6366f1' };
-}
-
 export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: Props) {
   const user               = useAuthStore(s => s.user);
   const getVisibleBoards   = useWorkStore(s => s.getVisibleBoards);
@@ -57,6 +50,17 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
   const toggleCardComplete = useWorkStore(s => s.toggleCardComplete);
   const rawNotifications   = useNotifStore(s => s.notifications);
   const showToast          = useToastStore(s => s.showToast);
+  const customLabels       = useSettingsStore(s => s.customLabels);
+
+  const allLabels = useMemo(() => [...LABELS, ...customLabels], [customLabels]);
+
+  const getLabelInfo = useCallback((lblId: string) => {
+    const found = allLabels.find(l => l.id === lblId);
+    if (found) {
+      return { label: found.name, color: found.color };
+    }
+    return { label: lblId, color: '#6366f1' };
+  }, [allLabels]);
 
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('all');
 
@@ -522,8 +526,8 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
 
                       {/* Labels */}
                       {card.labels && card.labels.length > 0 && (
-                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                          {card.labels.slice(0, 2).map(lblId => {
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                          {card.labels.map(lblId => {
                             const lbl = getLabelInfo(lblId);
                             return (
                               <span
@@ -533,8 +537,9 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                                   fontWeight: 600,
                                   padding: '2px 6px',
                                   borderRadius: 4,
-                                  backgroundColor: `${lbl.color}15`,
-                                  color: lbl.color
+                                  backgroundColor: `${lbl.color}18`,
+                                  color: lbl.color,
+                                  whiteSpace: 'nowrap'
                                 }}
                               >
                                 {lbl.label}

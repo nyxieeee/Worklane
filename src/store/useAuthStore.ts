@@ -61,7 +61,7 @@ export const useAuthStore = create<AuthState>()(
             id: u.id,
             name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'User',
             email: u.email || '',
-            avatarUrl: u.user_metadata?.avatar_url || u.user_metadata?.picture,
+            avatarUrl: u.user_metadata?.avatar_url || u.user_metadata?.picture || u.identities?.[0]?.identity_data?.avatar_url || u.identities?.[0]?.identity_data?.picture,
             provider: (u.app_metadata?.provider as any) || (u.user_metadata?.provider as any) || 'email',
           });
 

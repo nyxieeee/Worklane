@@ -194,12 +194,25 @@ export default function Topbar({
               backgroundColor: 'hsl(var(--primary))',
               color: 'hsl(var(--primary-foreground))',
               fontSize: 11,
-              fontWeight: 700
+              fontWeight: 700,
+              padding: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
             onClick={() => setUserDropOpen(o => !o)}
             title="User Profile"
           >
-            {avatarInitials(user?.name || 'U')}
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user?.name || 'User'}
+                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : (
+              avatarInitials(user?.name || 'U')
+            )}
           </motion.button>
 
           <AnimatePresence>
@@ -213,26 +226,52 @@ export default function Topbar({
                   position: 'absolute',
                   top: 38,
                   right: 0,
-                  width: 180,
+                  width: 210,
                   backgroundColor: 'hsl(var(--popover))',
                   borderRadius: 'var(--radius)',
                   boxShadow: 'var(--neu-shadow-floating)',
-                  padding: '6px',
+                  padding: '8px',
                   zIndex: 50,
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 4
                 }}
               >
-                <div style={{ padding: '6px 8px', borderBottom: '1px solid hsl(var(--border) / 0.5)', marginBottom: 2 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'hsl(var(--foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user?.name || 'User'}
-                  </div>
-                  {user?.email && (
-                    <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {user.email}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderBottom: '1px solid hsl(var(--border) / 0.5)', marginBottom: 4 }}>
+                  {user?.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt={user?.name || 'User'}
+                      style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        backgroundColor: 'hsl(var(--primary))',
+                        color: 'hsl(var(--primary-foreground))',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      {avatarInitials(user?.name || 'U')}
                     </div>
                   )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'hsl(var(--foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {user?.name || 'User'}
+                    </div>
+                    {user?.email && (
+                      <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {user.email}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <motion.button

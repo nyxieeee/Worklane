@@ -296,7 +296,17 @@ export default function MembersModal({ onClose }: Props) {
                 onChange={e => setEmail(e.target.value)}
               />
             </div>
-            <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary" onClick={handleAdd} style={{ alignSelf: 'flex-start' }}>
+            <motion.button
+              whileTap={(name.trim() && email.trim()) ? { scale: 0.95 } : undefined}
+              className="btn btn-primary"
+              onClick={handleAdd}
+              disabled={!name.trim() || !email.trim()}
+              style={{
+                alignSelf: 'flex-start',
+                opacity: (name.trim() && email.trim()) ? 1 : 0.5,
+                cursor: (name.trim() && email.trim()) ? 'pointer' : 'not-allowed',
+              }}
+            >
               <UserPlus size={14} /> Add to Team
             </motion.button>
           </div>

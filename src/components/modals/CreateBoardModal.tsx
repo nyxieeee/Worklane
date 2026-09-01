@@ -82,7 +82,16 @@ export default function CreateBoardModal({ onClose }: Props) {
         </div>
         <div className="modal-footer">
           <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary" onClick={onClose}>Cancel</motion.button>
-          <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary" onClick={handleCreate}>
+          <motion.button
+            whileTap={name.trim() ? { scale: 0.95 } : undefined}
+            className="btn btn-primary"
+            onClick={handleCreate}
+            disabled={!name.trim()}
+            style={{
+              opacity: name.trim() ? 1 : 0.5,
+              cursor: name.trim() ? 'pointer' : 'not-allowed',
+            }}
+          >
             <Check size={14} /> Create Board
           </motion.button>
         </div>

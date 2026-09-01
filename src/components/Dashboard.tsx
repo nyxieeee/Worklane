@@ -308,8 +308,12 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                   const memberCount = board.members?.length ?? 0;
 
                   return (
-                    <Tilt3D key={board.id} maxTilt={10} scale={1.02} onClick={() => onSelectBoard(board.id)}>
-                      <div className="dashboard-board-card">
+                    <Tilt3D key={board.id} maxTilt={10} scale={1.02}>
+                      <div
+                        className="dashboard-board-card"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onSelectBoard(board.id)}
+                      >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div
@@ -325,14 +329,20 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                               {board.name}
                             </span>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <div
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, position: 'relative', zIndex: 10 }}
+                            onClick={e => e.stopPropagation()}
+                            onMouseDown={e => e.stopPropagation()}
+                          >
                             {(!board.createdBy || (user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim())) && (
                               <button
+                                type="button"
                                 className="icon-btn"
-                                style={{ width: 26, height: 26, color: 'hsl(var(--destructive))' }}
+                                style={{ width: 26, height: 26, color: 'hsl(var(--destructive))', cursor: 'pointer' }}
                                 title="Delete board"
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  e.preventDefault();
                                   if (window.confirm(`Delete board "${board.name}" and all its tasks?`)) {
                                     deleteBoard(board.id);
                                     showToast(`Deleted board "${board.name}"`, 'info');
@@ -342,9 +352,18 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                                 <Trash2 size={13} />
                               </button>
                             )}
-                            <span className="icon-btn" style={{ width: 26, height: 26 }} title="Open board">
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              style={{ width: 26, height: 26, cursor: 'pointer' }}
+                              title="Open board"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectBoard(board.id);
+                              }}
+                            >
                               <ArrowUpRight size={14} />
-                            </span>
+                            </button>
                           </div>
                         </div>
 

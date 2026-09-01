@@ -794,6 +794,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                       whileTap={{ scale: 0.94 }}
                       whileHover={{ scale: 1.04 }}
                       key={l.id}
+                      type="button"
                       style={{
                         fontSize: 11.5,
                         fontWeight: 600,
@@ -808,7 +809,6 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                         backgroundColor: isSelected ? l.color : 'hsl(var(--card))',
                         color: isSelected ? '#ffffff' : 'hsl(var(--foreground))',
                         cursor: 'pointer',
-                        transition: 'all 0.15s ease',
                         border: isSelected ? `1px solid ${l.color}` : '1px solid transparent'
                       }}
                       onClick={() => toggleCardLabel(cardId, l.id)}

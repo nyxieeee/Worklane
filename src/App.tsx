@@ -61,16 +61,23 @@ export default function App() {
   useEffect(() => {
     if (!currentUser?.email) return;
     const email = currentUser.email;
+
+    let boardsDebounceTimer: number | undefined;
+
     const unsub = supabaseService.subscribeToAll(
       email,
       () => {
-        loadBoardsFromCloud(email);
+        if (boardsDebounceTimer) clearTimeout(boardsDebounceTimer);
+        boardsDebounceTimer = window.setTimeout(() => {
+          loadBoardsFromCloud(email);
+        }, 1200);
       },
       () => {
         loadNotificationsFromCloud(email);
       }
     );
     return () => {
+      if (boardsDebounceTimer) clearTimeout(boardsDebounceTimer);
       unsub();
     };
   }, [currentUser?.email, loadBoardsFromCloud, loadNotificationsFromCloud]);

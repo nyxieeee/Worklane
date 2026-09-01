@@ -111,6 +111,21 @@ function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => C
   };
 }
 
+const syncTimers = new Map<string, number>();
+
+export function scheduleBoardSync(board: Board, delayMs = 350) {
+  if (!board || !board.id) return;
+  const existing = syncTimers.get(board.id);
+  if (existing) clearTimeout(existing);
+
+  const timer = window.setTimeout(() => {
+    syncTimers.delete(board.id);
+    supabaseService.syncBoard(board);
+  }, delayMs);
+
+  syncTimers.set(board.id, timer);
+}
+
 // ── Zustand Store (Persistent Cache + Supabase Real-Time Sync) ───────────────
 
 export const useWorkStore = create<WorkState>()(
@@ -356,7 +371,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       deleteCard: (cardId) => {
@@ -504,7 +519,7 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: resultBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       toggleCardLabel: (cardId, labelId) => {
@@ -528,7 +543,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       toggleCardAssignee: (cardId, memberId) => {
@@ -575,7 +590,7 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: result };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       // ── Attachment actions ────────────────────────────

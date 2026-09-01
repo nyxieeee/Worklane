@@ -249,46 +249,25 @@ export const useWorkStore = create<WorkState>()(
 
       leaveBoard: (boardId, userEmail) => {
         const email = userEmail.toLowerCase().trim();
-        let targetBoard: Board | undefined;
+        let memberId: string | undefined;
 
         set(s => {
           const board = s.boards.find(b => b.id === boardId);
           if (!board) return s;
           const memberToRemove = board.members.find(m => m.email?.toLowerCase().trim() === email);
-          const memberId = memberToRemove?.id;
+          memberId = memberToRemove?.id;
 
-          const updatedBoards = s.boards.map(b => {
-            if (b.id !== boardId) return b;
-            return {
-              ...b,
-              members: b.members.filter(m => m.email?.toLowerCase().trim() !== email),
-              columns: b.columns.map(col => ({
-                ...col,
-                cards: col.cards.map(c => ({
-                  ...c,
-                  assignees: memberId ? c.assignees.filter(a => a !== memberId) : c.assignees
-                }))
-              }))
-            };
-          });
-
-          targetBoard = updatedBoards.find(b => b.id === boardId);
-
-          const visibleRemaining = updatedBoards.filter(b => 
-            (b.createdBy && b.createdBy.toLowerCase().trim() === email) ||
-            b.members.some(m => m.email && m.email.toLowerCase().trim() === email)
-          );
-
+          // For the leaving user, immediately remove this board from their active store state
+          const remainingBoards = s.boards.filter(b => b.id !== boardId);
           const activeBoardId = s.activeBoardId === boardId
-            ? (visibleRemaining[0]?.id ?? null)
+            ? (remainingBoards[0]?.id ?? null)
             : s.activeBoardId;
 
-          return { boards: updatedBoards, activeBoardId };
+          return { boards: remainingBoards, activeBoardId };
         });
 
-        if (targetBoard) {
-          supabaseService.syncBoard(targetBoard);
-        }
+        // Delete the membership row in Supabase so it won't be returned on next sync
+        supabaseService.removeMemberFromBoard(boardId, email, memberId);
       },
 
       switchBoard: (boardId) => set({ activeBoardId: boardId }),
@@ -802,8 +781,15 @@ export const useWorkStore = create<WorkState>()(
 
       removeMember: (memberId) => {
         let targetBoard: Board | undefined;
+        let removedEmail: string | undefined;
+        const activeId = get().activeBoardId;
+
         set(s => {
           if (!s.activeBoardId) return s;
+          const currentBoard = s.boards.find(b => b.id === s.activeBoardId);
+          const memberObj = currentBoard?.members.find(m => m.id === memberId);
+          removedEmail = memberObj?.email;
+
           const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => ({
             ...b,
             members: b.members.filter(m => m.id !== memberId),
@@ -817,7 +803,13 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+
+        if (activeId) {
+          supabaseService.removeMemberFromBoard(activeId, removedEmail, memberId);
+        }
+        if (targetBoard) {
+          supabaseService.syncBoard(targetBoard);
+        }
       },
     }),
     { name: 'worklane_data_v4' }

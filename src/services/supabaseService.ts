@@ -420,6 +420,29 @@ export const supabaseService = {
   },
 
   /**
+   * Delete a member from a board in Supabase
+   */
+  async removeMemberFromBoard(boardId: string, email?: string, memberId?: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !boardId) return false;
+    try {
+      let query = supabase.from('board_members').delete().eq('board_id', boardId);
+      if (email && memberId) {
+        query = query.or(`email.ilike.${email.toLowerCase().trim()},id.eq.${memberId}`);
+      } else if (email) {
+        query = query.ilike('email', email.toLowerCase().trim());
+      } else if (memberId) {
+        query = query.eq('id', memberId);
+      }
+      const { error } = await query;
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Error removing board member:', err);
+      return false;
+    }
+  },
+
+  /**
    * Delete a board from Supabase
    */
   async deleteBoard(boardId: string): Promise<boolean> {

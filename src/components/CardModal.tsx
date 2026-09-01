@@ -223,15 +223,32 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   };
 
   const renderCommentText = (text: string) => {
-    const parts = text.split(/(@[^\s@]+(?:\s[^\s@]+)?)/g);
+    if (!text) return null;
+
+    // Sort member names by length descending to match full multi-word names first (e.g. "John Enrico Santiago")
+    const memberNames = members
+      .map(m => m.name?.trim())
+      .filter((name): name is string => Boolean(name))
+      .sort((a, b) => b.length - a.length);
+
+    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Matches @FullName, @Email, or single @Word
+    const mentionPattern = memberNames.length > 0
+      ? new RegExp(`(@(?:${memberNames.map(escapeRegex).join('|')}|[^\\s@]+))`, 'gi')
+      : /(@[^\s@]+)/g;
+
+    const parts = text.split(mentionPattern);
+
     return parts.map((part, idx) => {
       if (part.startsWith('@')) {
         const potentialName = part.slice(1).trim().toLowerCase();
-        const matched = members.find(m =>
-          m.name.toLowerCase().startsWith(potentialName) ||
-          potentialName.startsWith(m.name.toLowerCase()) ||
-          (m.email && m.email.toLowerCase().startsWith(potentialName))
-        );
+        const matched = members.find(m => {
+          const mName = m.name?.toLowerCase().trim();
+          const mEmail = m.email?.toLowerCase().trim();
+          return mName === potentialName || mEmail === potentialName || (mName && potentialName.startsWith(mName));
+        });
+
         if (matched) {
           return (
             <span

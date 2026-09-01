@@ -230,17 +230,19 @@ export default function MembersModal({ onClose }: Props) {
                         )}
                       </div>
 
-                      {/* Action: Leave if current user, or remove if owner */}
+                      {/* Action: Leave if non-owner current user, or remove if owner */}
                       {isCurrent ? (
-                        <motion.button
-                          whileTap={{ scale: 0.9 }}
-                          className="icon-btn"
-                          style={{ color: 'hsl(var(--destructive))' }}
-                          title="Leave Board"
-                          onClick={handleLeaveBoard}
-                        >
-                          <LogOut size={14} />
-                        </motion.button>
+                        !isBoardCreator && !isOwner ? (
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            className="icon-btn"
+                            style={{ color: 'hsl(var(--destructive))' }}
+                            title="Leave Board"
+                            onClick={handleLeaveBoard}
+                          >
+                            <LogOut size={14} />
+                          </motion.button>
+                        ) : null
                       ) : (
                         (isOwner || !board.createdBy) && (
                           <motion.button
@@ -299,8 +301,8 @@ export default function MembersModal({ onClose }: Props) {
             </motion.button>
           </div>
 
-          {/* Leave Board Option for enrolled non-owner members */}
-          {isMember && (
+          {/* Leave Board Option for enrolled non-owner members only */}
+          {!isOwner && isMember && (
             <div
               style={{
                 marginTop: 14,

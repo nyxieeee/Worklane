@@ -16,14 +16,21 @@ export default function CreateBoardModal({ onClose }: Props) {
   const user = useAuthStore(s => s.user);
   const [name, setName] = useState('');
   const [selectedColor, setSelectedColor] = useState<string>(BOARD_COLORS[0].value);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCreate = async () => {
-    if (!name.trim()) return;
-    const newBoard = await createBoard(name.trim(), selectedColor, user?.email, user?.name);
-    showToast(`Board "${name.trim()}" created`, 'success');
-    setName('');
-    setSelectedColor(BOARD_COLORS[0].value);
-    onClose(newBoard.id);
+    if (!name.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const newBoard = await createBoard(name.trim(), selectedColor, user?.email, user?.name);
+      showToast(`Board "${name.trim()}" created`, 'success');
+      setName('');
+      setSelectedColor(BOARD_COLORS[0].value);
+      onClose(newBoard.id);
+    } catch (err) {
+      console.error('[CreateBoardModal] error creating board:', err);
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -83,16 +90,16 @@ export default function CreateBoardModal({ onClose }: Props) {
         <div className="modal-footer">
           <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary" onClick={() => onClose()}>Cancel</motion.button>
           <motion.button
-            whileTap={name.trim() ? { scale: 0.95 } : undefined}
+            whileTap={(name.trim() && !isSubmitting) ? { scale: 0.95 } : undefined}
             className="btn btn-primary"
             onClick={handleCreate}
-            disabled={!name.trim()}
+            disabled={!name.trim() || isSubmitting}
             style={{
-              opacity: name.trim() ? 1 : 0.5,
-              cursor: name.trim() ? 'pointer' : 'not-allowed',
+              opacity: (name.trim() && !isSubmitting) ? 1 : 0.5,
+              cursor: (name.trim() && !isSubmitting) ? 'pointer' : 'not-allowed',
             }}
           >
-            <Check size={14} /> Create Board
+            <Check size={14} /> {isSubmitting ? 'Creating...' : 'Create Board'}
           </motion.button>
         </div>
       </motion.div>

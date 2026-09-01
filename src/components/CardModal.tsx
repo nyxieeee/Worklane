@@ -758,9 +758,10 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
             <div className="form-group">
               <label className="field-label">Status</label>
               <motion.button
-                whileTap={{ scale: 0.97 }}
+                whileTap={{ scale: 0.96 }}
+                type="button"
                 className={`btn ${card.completed ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ width: '100%', justifyContent: 'flex-start' }}
+                style={{ width: '100%', justifyContent: 'flex-start', cursor: 'pointer' }}
                 onClick={() => toggleCardComplete(cardId)}
               >
                 {card.completed ? <CheckSquare size={14} /> : <Square size={14} />}

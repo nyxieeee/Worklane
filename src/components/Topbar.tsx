@@ -183,13 +183,17 @@ export default function Topbar({
         </div>
 
         {/* User Account Menu */}
-        <div style={{ position: 'relative' }} ref={chipRef}>
+        <div style={{ position: 'relative', flexShrink: 0 }} ref={chipRef}>
           <motion.button
             whileTap={{ scale: 0.92 }}
             className="icon-btn"
             style={{
-              width: 30,
-              height: 30,
+              width: 32,
+              height: 32,
+              minWidth: 32,
+              minHeight: 32,
+              flexShrink: 0,
+              aspectRatio: '1 / 1',
               borderRadius: '50%',
               backgroundColor: 'hsl(var(--primary))',
               color: 'hsl(var(--primary-foreground))',
@@ -208,7 +212,7 @@ export default function Topbar({
               <img
                 src={user.avatarUrl}
                 alt={user?.name || 'User'}
-                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', display: 'block', aspectRatio: '1 / 1' }}
               />
             ) : (
               avatarInitials(user?.name || 'U')

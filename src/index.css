@@ -440,12 +440,18 @@ html, body, #root {
   background-color: hsl(var(--card));
   box-shadow: var(--neu-shadow-raised-sm);
   color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 /* ══ Neumorphic Tactile Buttons ════════════════════════════ */
@@ -537,8 +543,12 @@ html, body, #root {
 .icon-btn {
   width: 32px;
   height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
   padding: 0;
-  border-radius: var(--radius);
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -858,6 +868,10 @@ html, body, #root {
 .card-avatar {
   width: 22px;
   height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   margin-left: -5px;
   display: flex;
@@ -869,6 +883,7 @@ html, body, #root {
   background-color: hsl(var(--primary));
   box-shadow: var(--neu-shadow-raised-sm);
   overflow: hidden;
+  object-fit: cover;
 }
 
 /* ══ List View & Calendar View ═════════════════════════════ */

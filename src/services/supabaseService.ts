@@ -39,34 +39,23 @@ export const supabaseService = {
     try {
       const cleanEmail = email.toLowerCase().trim();
 
-      // 1. Query boards table directly
-      let { data: boardsData, error: boardsErr } = await supabase
-        .from('boards')
-        .select('*')
-        .order('created_at', { ascending: true });
+      // 1. Find all board IDs where user is enrolled as a collaborator
+      const { data: memberRows } = await supabase
+        .from('board_members')
+        .select('board_id')
+        .ilike('email', cleanEmail);
 
-      // Fallback query if needed
-      if ((!boardsData || boardsData.length === 0) && !boardsErr) {
-        const { data: memberRows } = await supabase
-          .from('board_members')
-          .select('board_id')
-          .ilike('email', cleanEmail);
+      const memberBoardIds = (memberRows || []).map(r => r.board_id).filter(Boolean);
 
-        const memberBoardIds = (memberRows || []).map(r => r.board_id);
-        if (memberBoardIds.length > 0) {
-          const { data: explicitBoards } = await supabase
-            .from('boards')
-            .select('*')
-            .or(`created_by.ilike.${cleanEmail},id.in.(${memberBoardIds.map(id => `"${id}"`).join(',')})`);
-          boardsData = explicitBoards || [];
-        } else {
-          const { data: createdBoards } = await supabase
-            .from('boards')
-            .select('*')
-            .ilike('created_by', cleanEmail);
-          boardsData = createdBoards || [];
-        }
+      // 2. Query only boards created by this user OR where user is a confirmed member
+      let boardsQuery = supabase.from('boards').select('*');
+      if (memberBoardIds.length > 0) {
+        boardsQuery = boardsQuery.or(`created_by.ilike.${cleanEmail},id.in.(${memberBoardIds.map(id => `"${id}"`).join(',')})`);
+      } else {
+        boardsQuery = boardsQuery.ilike('created_by', cleanEmail);
       }
+
+      const { data: boardsData, error: boardsErr } = await boardsQuery.order('created_at', { ascending: true });
 
       if (boardsErr) {
         console.warn('[SupabaseService] getBoards error:', boardsErr);

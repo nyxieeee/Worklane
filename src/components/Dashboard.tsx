@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   KanbanSquare, Plus, CheckSquare, Clock,
   Layers, Zap, CheckCircle2,
-  Calendar, Activity, ArrowUpRight, Sparkles, Trash2
+  Calendar, Activity, ArrowUpRight, Sparkles, Trash2, LogOut
 } from 'lucide-react';
 import { motion, type Variants } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -47,6 +47,7 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
   const user               = useAuthStore(s => s.user);
   const getVisibleBoards   = useWorkStore(s => s.getVisibleBoards);
   const deleteBoard        = useWorkStore(s => s.deleteBoard);
+  const leaveBoard         = useWorkStore(s => s.leaveBoard);
   const toggleCardComplete = useWorkStore(s => s.toggleCardComplete);
   const rawNotifications   = useNotifStore(s => s.notifications);
   const showToast          = useToastStore(s => s.showToast);
@@ -334,7 +335,7 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                             onClick={e => e.stopPropagation()}
                             onMouseDown={e => e.stopPropagation()}
                           >
-                            {(!board.createdBy || (user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim())) && (
+                            {!board.createdBy || (user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) ? (
                               <button
                                 type="button"
                                 className="icon-btn"
@@ -350,6 +351,23 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                                 }}
                               >
                                 <Trash2 size={13} />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                style={{ width: 26, height: 26, color: 'hsl(var(--destructive))', cursor: 'pointer' }}
+                                title="Leave board"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  if (user?.email && window.confirm(`Leave board "${board.name}"?`)) {
+                                    leaveBoard(board.id, user.email);
+                                    showToast(`You left "${board.name}"`, 'info');
+                                  }
+                                }}
+                              >
+                                <LogOut size={13} />
                               </button>
                             )}
                             <button

@@ -7,7 +7,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { BOARD_COLORS } from '../../types';
 
 interface Props {
-  onClose: () => void;
+  onClose: (createdBoardId?: string) => void;
 }
 
 export default function CreateBoardModal({ onClose }: Props) {
@@ -19,15 +19,15 @@ export default function CreateBoardModal({ onClose }: Props) {
 
   const handleCreate = async () => {
     if (!name.trim()) return;
-    await createBoard(name.trim(), selectedColor, user?.email, user?.name);
+    const newBoard = await createBoard(name.trim(), selectedColor, user?.email, user?.name);
     showToast(`Board "${name.trim()}" created`, 'success');
     setName('');
     setSelectedColor(BOARD_COLORS[0].value);
-    onClose();
+    onClose(newBoard.id);
   };
 
   return (
-    <div className="modal-overlay" style={{ perspective: 1200 }} onClick={onClose}>
+    <div className="modal-overlay" style={{ perspective: 1200 }} onClick={() => onClose()}>
       <motion.div
         initial={{ opacity: 0, scale: 0.94, rotateX: 12, translateZ: -50 }}
         animate={{ opacity: 1, scale: 1, rotateX: 0, translateZ: 0 }}
@@ -39,7 +39,7 @@ export default function CreateBoardModal({ onClose }: Props) {
       >
         <div className="modal-header">
           <h2 className="modal-title">Create Board</h2>
-          <motion.button whileTap={{ scale: 0.92 }} className="icon-btn" onClick={onClose}><X size={15} /></motion.button>
+          <motion.button whileTap={{ scale: 0.92 }} className="icon-btn" onClick={() => onClose()}><X size={15} /></motion.button>
         </div>
         <div className="modal-body">
           <div className="form-group">
@@ -81,7 +81,7 @@ export default function CreateBoardModal({ onClose }: Props) {
           </div>
         </div>
         <div className="modal-footer">
-          <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary" onClick={onClose}>Cancel</motion.button>
+          <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary" onClick={() => onClose()}>Cancel</motion.button>
           <motion.button
             whileTap={name.trim() ? { scale: 0.95 } : undefined}
             className="btn btn-primary"

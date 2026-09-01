@@ -329,10 +329,12 @@ export default function App() {
       {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
       {showCreateBoard && (
         <CreateBoardModal
-          onClose={() => {
+          onClose={(createdBoardId?: string) => {
             setShowCreateBoard(false);
-            const newId = useWorkStore.getState().activeBoardId;
-            if (newId) setPage('board');
+            if (createdBoardId) {
+              switchBoard(createdBoardId);
+              setPage('board');
+            }
           }}
         />
       )}

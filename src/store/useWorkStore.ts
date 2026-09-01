@@ -146,24 +146,11 @@ export const useWorkStore = create<WorkState>()(
           const cloudBoards = await supabaseService.getBoardsForUser(cleanEmail);
           
           set(s => {
-            // Find any local boards that need to be uploaded to Supabase
-            const localOnly = s.boards.filter(b => 
-              !cloudBoards.some(cb => cb.id === b.id) &&
-              (b.createdBy?.toLowerCase().trim() === cleanEmail || b.members?.some(m => m.email?.toLowerCase().trim() === cleanEmail))
-            );
-
-            // Upload them in background
-            localOnly.forEach(b => {
-              supabaseService.syncBoard(b);
-            });
-
-            // Merge cloud boards with local boards (cloud takes precedence if matching id)
-            const merged = [...cloudBoards, ...localOnly];
-            const activeBoardId = s.activeBoardId && merged.some(b => b.id === s.activeBoardId)
+            const activeBoardId = s.activeBoardId && cloudBoards.some(b => b.id === s.activeBoardId)
               ? s.activeBoardId
-              : (merged[0]?.id ?? null);
+              : (cloudBoards[0]?.id ?? null);
 
-            return { boards: merged, activeBoardId, isLoadingCloud: false };
+            return { boards: cloudBoards, activeBoardId, isLoadingCloud: false };
           });
         } catch (err) {
           console.warn('[useWorkStore] Cloud load error:', err);
@@ -205,7 +192,10 @@ export const useWorkStore = create<WorkState>()(
           ],
         };
 
-        set(s => ({ boards: [...s.boards, board], activeBoardId: board.id }));
+        set(s => ({
+          boards: [...s.boards.filter(b => b.id !== board.id), board],
+          activeBoardId: board.id
+        }));
         await supabaseService.syncBoard(board);
         return board;
       },

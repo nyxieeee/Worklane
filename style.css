@@ -155,7 +155,7 @@ img { display: block; max-width: 100%; }
   border-radius: 50%;
   flex-shrink: 0;
 }
-.board-list-item .board-name { flex: 1; truncate: ellipsis; overflow: hidden; white-space: nowrap; }
+.board-list-item .board-name { flex: 1; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
 .board-list-item .board-del {
   opacity: 0;
   background: none;

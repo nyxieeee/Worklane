@@ -320,33 +320,49 @@ export default function BoardArea({
                 )}
               </div>
               {/* Month navigation */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <motion.button
                   whileTap={{ scale: 0.92 }}
-                  onClick={goPrevMonth}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, boxShadow: 'var(--neu-shadow-raised-sm)', color: 'hsl(var(--foreground))' }}
+                  onClick={goToday}
+                  title="Jump to current month"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    color: (calendarYear === today.getFullYear() && calendarMonth === today.getMonth())
+                      ? 'hsl(var(--muted-foreground))'
+                      : 'hsl(var(--primary))',
+                    padding: '4px 10px',
+                    borderRadius: 9999,
+                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                    opacity: (calendarYear === today.getFullYear() && calendarMonth === today.getMonth()) ? 0.7 : 1,
+                  }}
                 >
-                  <ChevronLeft size={15} />
+                  Today
                 </motion.button>
-                <span style={{ fontSize: 13, fontWeight: 600, minWidth: 130, textAlign: 'center', color: 'hsl(var(--foreground))' }}>
-                  {new Date(calendarYear, calendarMonth).toLocaleDateString([], { month: 'long', year: 'numeric' })}
-                </span>
-                <motion.button
-                  whileTap={{ scale: 0.92 }}
-                  onClick={goNextMonth}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, boxShadow: 'var(--neu-shadow-raised-sm)', color: 'hsl(var(--foreground))' }}
-                >
-                  <ChevronRight size={15} />
-                </motion.button>
-                {(calendarYear !== today.getFullYear() || calendarMonth !== today.getMonth()) && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <motion.button
                     whileTap={{ scale: 0.92 }}
-                    onClick={goToday}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: 'hsl(var(--primary))', padding: '3px 10px', borderRadius: 9999, boxShadow: 'var(--neu-shadow-raised-sm)' }}
+                    onClick={goPrevMonth}
+                    title="Previous month"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, boxShadow: 'var(--neu-shadow-raised-sm)', color: 'hsl(var(--foreground))' }}
                   >
-                    Today
+                    <ChevronLeft size={15} />
                   </motion.button>
-                )}
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
+                    onClick={goNextMonth}
+                    title="Next month"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, boxShadow: 'var(--neu-shadow-raised-sm)', color: 'hsl(var(--foreground))' }}
+                  >
+                    <ChevronRight size={15} />
+                  </motion.button>
+                </div>
+                <span style={{ fontSize: 13.5, fontWeight: 600, minWidth: 125, color: 'hsl(var(--foreground))' }}>
+                  {new Date(calendarYear, calendarMonth).toLocaleDateString([], { month: 'long', year: 'numeric' })}
+                </span>
               </div>
             </div>
 

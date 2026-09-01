@@ -112,15 +112,27 @@ function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => C
 }
 
 const syncTimers = new Map<string, number>();
+const activeSyncs = new Set<string>();
+const lastLocalMutationTime = new Map<string, number>();
 
 export function scheduleBoardSync(board: Board, delayMs = 350) {
   if (!board || !board.id) return;
+  lastLocalMutationTime.set(board.id, Date.now());
+
   const existing = syncTimers.get(board.id);
   if (existing) clearTimeout(existing);
 
-  const timer = window.setTimeout(() => {
+  const timer = window.setTimeout(async () => {
     syncTimers.delete(board.id);
-    supabaseService.syncBoard(board);
+    activeSyncs.add(board.id);
+    try {
+      await supabaseService.syncBoard(board);
+    } finally {
+      // Keep a 3-second guard after sync finishes to avoid cloud echo race condition
+      setTimeout(() => {
+        activeSyncs.delete(board.id);
+      }, 3000);
+    }
   }, delayMs);
 
   syncTimers.set(board.id, timer);
@@ -154,27 +166,40 @@ export const useWorkStore = create<WorkState>()(
       // ── Cloud Sync Actions ─────────────────────────────
       loadBoardsFromCloud: async (userEmail: string) => {
         if (!userEmail || !supabaseService.isConfigured()) return;
-        // Don't overwrite if local changes are currently pending sync
-        if (syncTimers.size > 0) return;
-
         const cleanEmail = userEmail.toLowerCase().trim();
-        set({ isLoadingCloud: true });
 
         try {
           const cloudBoards = await supabaseService.getBoardsForUser(cleanEmail);
-          
-          // If a local edit occurred while waiting for the network response, abort overwrite
-          if (syncTimers.size > 0) {
-            set({ isLoadingCloud: false });
-            return;
-          }
+          if (!cloudBoards) return;
 
           set(s => {
-            const activeBoardId = s.activeBoardId && cloudBoards.some(b => b.id === s.activeBoardId)
-              ? s.activeBoardId
-              : (cloudBoards[0]?.id ?? null);
+            const now = Date.now();
+            // Merge cloud boards with local boards:
+            // If a local board is currently pending sync or was mutated within the last 3500ms, keep the local version!
+            const mergedBoards = cloudBoards.map(cb => {
+              const hasPendingSync = syncTimers.has(cb.id) || activeSyncs.has(cb.id);
+              const lastMutation = lastLocalMutationTime.get(cb.id) || 0;
+              const isRecentMutation = (now - lastMutation) < 3500;
 
-            return { boards: cloudBoards, activeBoardId, isLoadingCloud: false };
+              if (hasPendingSync || isRecentMutation) {
+                const localBoard = s.boards.find(lb => lb.id === cb.id);
+                if (localBoard) return localBoard;
+              }
+              return cb;
+            });
+
+            // Also keep any local boards that are newly created and not yet returned by cloud query
+            s.boards.forEach(lb => {
+              if (!mergedBoards.some(b => b.id === lb.id)) {
+                mergedBoards.push(lb);
+              }
+            });
+
+            const activeBoardId = s.activeBoardId && mergedBoards.some(b => b.id === s.activeBoardId)
+              ? s.activeBoardId
+              : (mergedBoards[0]?.id ?? null);
+
+            return { boards: mergedBoards, activeBoardId, isLoadingCloud: false };
           });
         } catch (err) {
           console.warn('[useWorkStore] Cloud load error:', err);

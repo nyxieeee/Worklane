@@ -154,12 +154,21 @@ export const useWorkStore = create<WorkState>()(
       // ── Cloud Sync Actions ─────────────────────────────
       loadBoardsFromCloud: async (userEmail: string) => {
         if (!userEmail || !supabaseService.isConfigured()) return;
+        // Don't overwrite if local changes are currently pending sync
+        if (syncTimers.size > 0) return;
+
         const cleanEmail = userEmail.toLowerCase().trim();
         set({ isLoadingCloud: true });
 
         try {
           const cloudBoards = await supabaseService.getBoardsForUser(cleanEmail);
           
+          // If a local edit occurred while waiting for the network response, abort overwrite
+          if (syncTimers.size > 0) {
+            set({ isLoadingCloud: false });
+            return;
+          }
+
           set(s => {
             const activeBoardId = s.activeBoardId && cloudBoards.some(b => b.id === s.activeBoardId)
               ? s.activeBoardId
@@ -299,7 +308,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       deleteColumn: (colId) => {
@@ -312,7 +321,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       renameColumn: (colId, name) => {
@@ -325,7 +334,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       addCard: (colId, title) => {
@@ -347,7 +356,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
         return card;
       },
 
@@ -392,7 +401,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       undoLastMove: () => {
@@ -407,7 +416,7 @@ export const useWorkStore = create<WorkState>()(
             lastMoveSnapshot: null,
           };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       moveCard: (cardId, fromColId, toColId, afterCardId) => {
@@ -465,7 +474,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards, lastMoveSnapshot: snapshot };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       toggleCardComplete: (cardId) => {
@@ -611,7 +620,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       removeAttachment: (cardId, attId) => {
@@ -631,7 +640,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       // ── Comment actions ───────────────────────────────
@@ -721,7 +730,7 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: resultBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       deleteComment: (cardId, commentId) => {
@@ -741,7 +750,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       // ── Member actions ────────────────────────────────
@@ -774,7 +783,7 @@ export const useWorkStore = create<WorkState>()(
         if (newMember) {
           supabaseService.addMember(currentActiveId, newMember);
           const board = get().boards.find(b => b.id === currentActiveId);
-          if (board) supabaseService.syncBoard(board);
+          if (board) scheduleBoardSync(board, 250);
         }
 
         return newId;
@@ -791,7 +800,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) supabaseService.syncBoard(targetBoard);
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
       removeMember: (memberId) => {
@@ -823,7 +832,7 @@ export const useWorkStore = create<WorkState>()(
           supabaseService.removeMemberFromBoard(activeId, removedEmail, memberId);
         }
         if (targetBoard) {
-          supabaseService.syncBoard(targetBoard);
+          scheduleBoardSync(targetBoard, 250);
         }
       },
     }),

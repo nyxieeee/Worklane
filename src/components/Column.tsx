@@ -291,9 +291,15 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
                 Cancel
               </motion.button>
               <motion.button
-                whileTap={{ scale: 0.95 }}
+                whileTap={newCardTitle.trim() ? { scale: 0.95 } : undefined}
                 className="btn btn-primary"
-                style={{ padding: '4px 10px', fontSize: 12 }}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 12,
+                  opacity: newCardTitle.trim() ? 1 : 0.5,
+                  cursor: newCardTitle.trim() ? 'pointer' : 'not-allowed',
+                }}
+                disabled={!newCardTitle.trim()}
                 onClick={handleAddCard}
               >
                 Add Card

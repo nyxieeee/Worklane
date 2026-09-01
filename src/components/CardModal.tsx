@@ -690,7 +690,17 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                   onKeyDown={handleCommentKeyDown}
                   onBlur={() => setTimeout(() => setShowMentionMenu(false), 200)}
                 />
-                <motion.button whileTap={{ scale: 0.92 }} className="btn btn-primary" onClick={handlePostComment} title="Post Comment">
+                <motion.button
+                  whileTap={commentText.trim() ? { scale: 0.92 } : undefined}
+                  className="btn btn-primary"
+                  onClick={handlePostComment}
+                  title="Post Comment"
+                  disabled={!commentText.trim()}
+                  style={{
+                    opacity: commentText.trim() ? 1 : 0.5,
+                    cursor: commentText.trim() ? 'pointer' : 'not-allowed',
+                  }}
+                >
                   <Send size={13} />
                 </motion.button>
               </div>
@@ -816,9 +826,15 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                   />
                   <div style={{ display: 'flex', gap: 6 }}>
                     <motion.button
-                      whileTap={{ scale: 0.95 }}
+                      whileTap={newLabelName.trim() ? { scale: 0.95 } : undefined}
                       className="btn btn-primary"
-                      style={{ fontSize: 11, padding: '3px 8px' }}
+                      style={{
+                        fontSize: 11,
+                        padding: '3px 8px',
+                        opacity: newLabelName.trim() ? 1 : 0.5,
+                        cursor: newLabelName.trim() ? 'pointer' : 'not-allowed',
+                      }}
+                      disabled={!newLabelName.trim()}
                       onClick={() => {
                         if (!newLabelName.trim()) return;
                         addCustomLabel(newLabelName.trim(), newLabelColor);

@@ -336,7 +336,12 @@ export default function App() {
           }}
         />
       )}
-      {showAddColumn && <AddColumnModal onClose={() => setShowAddColumn(false)} />}
+      {showAddColumn && (
+        <AddColumnModal
+          onClose={() => setShowAddColumn(false)}
+          mode={viewMode === 'list' ? 'row' : 'column'}
+        />
+      )}
       {showMembers && <MembersModal onClose={() => setShowMembers(false)} />}
       {showEmail && <EmailNotifModal onClose={() => setShowEmail(false)} />}
 

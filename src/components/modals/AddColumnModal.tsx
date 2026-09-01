@@ -5,11 +5,15 @@ import { useWorkStore } from '../../store/useWorkStore';
 
 interface Props {
   onClose: () => void;
+  mode?: 'column' | 'row';
 }
 
-export default function AddColumnModal({ onClose }: Props) {
+export default function AddColumnModal({ onClose, mode = 'column' }: Props) {
   const addColumn = useWorkStore(s => s.addColumn);
   const [name, setName] = useState('');
+
+  const isRow = mode === 'row';
+  const labelText = isRow ? 'Row' : 'Column';
 
   const handleAdd = () => {
     if (!name.trim()) return;
@@ -30,12 +34,12 @@ export default function AddColumnModal({ onClose }: Props) {
         onClick={e => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 className="modal-title">Add Column</h2>
+          <h2 className="modal-title">Add {labelText}</h2>
           <motion.button whileTap={{ scale: 0.92 }} className="icon-btn" onClick={onClose}><X size={15} /></motion.button>
         </div>
         <div className="modal-body">
           <div className="form-group">
-            <label className="field-label">Column Name</label>
+            <label className="field-label">{labelText} Name</label>
             <input
               type="text"
               className="text-input"
@@ -60,7 +64,7 @@ export default function AddColumnModal({ onClose }: Props) {
               cursor: name.trim() ? 'pointer' : 'not-allowed',
             }}
           >
-            <Check size={14} /> Add Column
+            <Check size={14} /> Add {labelText}
           </motion.button>
         </div>
       </motion.div>

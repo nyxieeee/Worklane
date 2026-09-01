@@ -199,7 +199,7 @@ export default function BoardArea({
                 )}
               </div>
               <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary" onClick={onAddColumn} style={{ fontSize: 12, padding: '6px 12px' }}>
-                <Plus size={13} /> Add Column
+                <Plus size={13} /> Add Row
               </motion.button>
             </div>
 
@@ -214,7 +214,7 @@ export default function BoardArea({
                   </div>
                   {col.cards.length === 0 ? (
                     <div style={{ padding: '16px 14px', fontSize: 12.5, color: 'hsl(var(--muted-foreground))' }}>
-                      No tasks in this column
+                      No tasks in this row
                     </div>
                   ) : (
                     col.cards.map(card => {

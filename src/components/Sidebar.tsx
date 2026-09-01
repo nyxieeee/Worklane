@@ -257,19 +257,10 @@ export default function Sidebar({
                         title="Delete Board"
                         onClick={(e) => {
                           e.stopPropagation();
-                          showToast(
-                            `Delete board "${b.name}" and all its tasks?`,
-                            'warning',
-                            6000,
-                            {
-                              label: 'Delete',
-                              variant: 'danger',
-                              onClick: () => {
-                                deleteBoard(b.id);
-                                showToast(`Deleted board "${b.name}"`, 'info');
-                              }
-                            }
-                          );
+                          if (window.confirm(`Delete board "${b.name}" and all its tasks?`)) {
+                            deleteBoard(b.id);
+                            showToast(`Deleted board "${b.name}"`, 'info');
+                          }
                         }}
                       >
                         <X size={12} />
@@ -281,20 +272,9 @@ export default function Sidebar({
                         style={{ color: 'hsl(var(--destructive))' }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (user?.email) {
-                            showToast(
-                              `Leave board "${b.name}"?`,
-                              'warning',
-                              6000,
-                              {
-                                label: 'Leave',
-                                variant: 'danger',
-                                onClick: () => {
-                                  leaveBoard(b.id, user.email);
-                                  showToast(`You left "${b.name}"`, 'info');
-                                }
-                              }
-                            );
+                          if (user?.email && window.confirm(`Leave board "${b.name}"?`)) {
+                            leaveBoard(b.id, user.email);
+                            showToast(`You left "${b.name}"`, 'info');
                           }
                         }}
                       >

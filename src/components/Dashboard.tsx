@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   KanbanSquare, Plus, CheckSquare, Clock,
   Layers, Zap, CheckCircle2,
-  Calendar, Activity, ArrowUpRight, Sparkles
+  Calendar, Activity, ArrowUpRight, Sparkles, Trash2
 } from 'lucide-react';
 import { motion, type Variants } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -53,6 +53,7 @@ function getLabelInfo(lblId: string) {
 export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: Props) {
   const user               = useAuthStore(s => s.user);
   const getVisibleBoards   = useWorkStore(s => s.getVisibleBoards);
+  const deleteBoard        = useWorkStore(s => s.deleteBoard);
   const toggleCardComplete = useWorkStore(s => s.toggleCardComplete);
   const rawNotifications   = useNotifStore(s => s.notifications);
   const showToast          = useToastStore(s => s.showToast);
@@ -320,9 +321,27 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                               {board.name}
                             </span>
                           </div>
-                          <span className="icon-btn" style={{ width: 26, height: 26 }} title="Open board">
-                            <ArrowUpRight size={14} />
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {(!board.createdBy || (user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim())) && (
+                              <button
+                                className="icon-btn"
+                                style={{ width: 26, height: 26, color: 'hsl(var(--destructive))' }}
+                                title="Delete board"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm(`Delete board "${board.name}" and all its tasks?`)) {
+                                    deleteBoard(board.id);
+                                    showToast(`Deleted board "${board.name}"`, 'info');
+                                  }
+                                }}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                            <span className="icon-btn" style={{ width: 26, height: 26 }} title="Open board">
+                              <ArrowUpRight size={14} />
+                            </span>
+                          </div>
                         </div>
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 'auto' }}>

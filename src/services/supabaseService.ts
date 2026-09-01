@@ -443,13 +443,27 @@ export const supabaseService = {
   },
 
   /**
-   * Delete a board from Supabase
+   * Delete a board from Supabase (cascades cleanly through all child tables)
    */
   async deleteBoard(boardId: string): Promise<boolean> {
     if (!isSupabaseConfigured() || !boardId) return false;
     try {
+      // 1. Delete associated children explicitly first (failsafe for foreign keys)
+      await supabase.from('card_assignees').delete().eq('board_id', boardId);
+      await supabase.from('card_labels').delete().eq('board_id', boardId);
+      await supabase.from('comments').delete().eq('board_id', boardId);
+      await supabase.from('attachments').delete().eq('board_id', boardId);
+      await supabase.from('cards').delete().eq('board_id', boardId);
+      await supabase.from('columns').delete().eq('board_id', boardId);
+      await supabase.from('board_members').delete().eq('board_id', boardId);
+      await supabase.from('custom_labels').delete().eq('board_id', boardId);
+
+      // 2. Delete the board itself
       const { error } = await supabase.from('boards').delete().eq('id', boardId);
-      if (error) throw error;
+      if (error) {
+        console.error('[SupabaseService] Error deleting board:', error);
+        throw error;
+      }
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error deleting board:', err);

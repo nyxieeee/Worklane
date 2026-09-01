@@ -1,5 +1,5 @@
 -- ==============================================================================
--- WORKLANE - SUPABASE DATABASE SCHEMA
+-- WORKLANE - FRESH RESET & COMPLETE DATABASE SCHEMA
 -- ==============================================================================
 -- Run this entire script in your Supabase SQL Editor:
 -- https://app.supabase.com/project/_/sql/new
@@ -10,9 +10,29 @@ create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
 
 -- ==============================================================================
--- 2. User Profiles Table (Linked to Supabase Auth)
+-- 2. DROP ALL EXISTING TABLES & OBJECTS (COMPLETE CLEAN RESET)
 -- ==============================================================================
-create table if not exists public.profiles (
+drop trigger if exists on_auth_user_created on auth.users;
+drop function if exists public.handle_new_user() cascade;
+drop function if exists public.is_board_member(text) cascade;
+
+drop table if exists public.email_logs cascade;
+drop table if exists public.notifications cascade;
+drop table if exists public.comments cascade;
+drop table if exists public.attachments cascade;
+drop table if exists public.custom_labels cascade;
+drop table if exists public.card_labels cascade;
+drop table if exists public.card_assignees cascade;
+drop table if exists public.cards cascade;
+drop table if exists public.columns cascade;
+drop table if exists public.board_members cascade;
+drop table if exists public.boards cascade;
+drop table if exists public.profiles cascade;
+
+-- ==============================================================================
+-- 3. PROFILES TABLE (Linked to Supabase Auth)
+-- ==============================================================================
+create table public.profiles (
   id uuid references auth.users on delete cascade primary key,
   name text,
   email text unique not null,
@@ -28,9 +48,9 @@ begin
   insert into public.profiles (id, name, email, avatar_url)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     new.email,
-    new.raw_user_meta_data->>'avatar_url'
+    coalesce(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture')
   )
   on conflict (id) do update
   set
@@ -41,27 +61,36 @@ begin
 end;
 $$ language plpgsql security definer;
 
-drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- Backfill profiles for any already registered auth users
+insert into public.profiles (id, name, email, avatar_url)
+select
+  id,
+  coalesce(raw_user_meta_data->>'full_name', raw_user_meta_data->>'name', split_part(email, '@', 1)),
+  email,
+  coalesce(raw_user_meta_data->>'avatar_url', raw_user_meta_data->>'picture')
+from auth.users
+on conflict (id) do nothing;
+
 -- ==============================================================================
--- 3. Boards Table
+-- 4. BOARDS TABLE
 -- ==============================================================================
-create table if not exists public.boards (
+create table public.boards (
   id text primary key default gen_random_uuid()::text,
   name text not null,
   color text default '#6366f1' not null,
-  created_by text not null, -- User Email or Auth User ID
+  created_by text not null, -- User Email
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
 );
 
 -- ==============================================================================
--- 4. Board Members Table
+-- 5. BOARD MEMBERS TABLE
 -- ==============================================================================
-create table if not exists public.board_members (
+create table public.board_members (
   id text primary key default gen_random_uuid()::text,
   board_id text references public.boards(id) on delete cascade not null,
   user_id uuid references auth.users(id) on delete set null,
@@ -69,15 +98,15 @@ create table if not exists public.board_members (
   email text not null,
   color text default '#6366f1' not null,
   avatar_url text,
-  role text default 'member' not null, -- 'owner', 'admin', 'member'
+  role text default 'member' not null,
   added_at timestamptz default now() not null,
   unique (board_id, email)
 );
 
 -- ==============================================================================
--- 5. Columns Table
+-- 6. COLUMNS TABLE
 -- ==============================================================================
-create table if not exists public.columns (
+create table public.columns (
   id text primary key default gen_random_uuid()::text,
   board_id text references public.boards(id) on delete cascade not null,
   name text not null,
@@ -86,9 +115,9 @@ create table if not exists public.columns (
 );
 
 -- ==============================================================================
--- 6. Cards Table
+-- 7. CARDS TABLE
 -- ==============================================================================
-create table if not exists public.cards (
+create table public.cards (
   id text primary key default gen_random_uuid()::text,
   board_id text references public.boards(id) on delete cascade not null,
   column_id text references public.columns(id) on delete cascade not null,
@@ -105,20 +134,20 @@ create table if not exists public.cards (
 );
 
 -- ==============================================================================
--- 7. Card Assignees Table (Many-to-Many)
+-- 8. CARD ASSIGNEES TABLE
 -- ==============================================================================
-create table if not exists public.card_assignees (
+create table public.card_assignees (
   id text primary key default gen_random_uuid()::text,
   card_id text references public.cards(id) on delete cascade not null,
-  member_id text not null, -- References board_members.id or board_members.email
+  member_id text not null,
   assigned_at timestamptz default now() not null,
   unique (card_id, member_id)
 );
 
 -- ==============================================================================
--- 8. Card Labels Table
+-- 9. CARD LABELS TABLE
 -- ==============================================================================
-create table if not exists public.card_labels (
+create table public.card_labels (
   id text primary key default gen_random_uuid()::text,
   card_id text references public.cards(id) on delete cascade not null,
   label_id text not null,
@@ -126,9 +155,9 @@ create table if not exists public.card_labels (
 );
 
 -- ==============================================================================
--- 9. Custom Labels Table
+-- 10. CUSTOM LABELS TABLE
 -- ==============================================================================
-create table if not exists public.custom_labels (
+create table public.custom_labels (
   id text primary key default gen_random_uuid()::text,
   user_email text,
   name text not null,
@@ -137,23 +166,23 @@ create table if not exists public.custom_labels (
 );
 
 -- ==============================================================================
--- 10. Attachments Table
+-- 11. ATTACHMENTS TABLE
 -- ==============================================================================
-create table if not exists public.attachments (
+create table public.attachments (
   id text primary key default gen_random_uuid()::text,
   card_id text references public.cards(id) on delete cascade not null,
   name text not null,
   size bigint default 0 not null,
   type text default 'application/octet-stream' not null,
-  data_url text, -- Base64 data or Supabase storage public URL
+  data_url text,
   storage_path text,
   added_at timestamptz default now() not null
 );
 
 -- ==============================================================================
--- 11. Comments Table
+-- 12. COMMENTS TABLE
 -- ==============================================================================
-create table if not exists public.comments (
+create table public.comments (
   id text primary key default gen_random_uuid()::text,
   card_id text references public.cards(id) on delete cascade not null,
   author text not null,
@@ -164,9 +193,9 @@ create table if not exists public.comments (
 );
 
 -- ==============================================================================
--- 12. Notifications Table
+-- 13. NOTIFICATIONS TABLE
 -- ==============================================================================
-create table if not exists public.notifications (
+create table public.notifications (
   id text primary key default gen_random_uuid()::text,
   recipient_email text not null,
   recipient_id uuid references auth.users(id) on delete set null,
@@ -180,21 +209,21 @@ create table if not exists public.notifications (
 );
 
 -- ==============================================================================
--- 13. Email Notification Logs Table
+-- 14. EMAIL NOTIFICATION LOGS TABLE
 -- ==============================================================================
-create table if not exists public.email_logs (
+create table public.email_logs (
   id text primary key default gen_random_uuid()::text,
   recipient_email text not null,
   recipient_name text not null,
   subject text not null,
   body text not null,
-  event_type text not null,
   status text default 'sent' not null,
+  event_type text not null,
   sent_at timestamptz default now() not null
 );
 
 -- ==============================================================================
--- 14. Performance Indexes
+-- 15. PERFORMANCE INDICES
 -- ==============================================================================
 create index if not exists idx_boards_created_by on public.boards(created_by);
 create index if not exists idx_board_members_board_id on public.board_members(board_id);
@@ -206,13 +235,10 @@ create index if not exists idx_card_assignees_card_id on public.card_assignees(c
 create index if not exists idx_card_labels_card_id on public.card_labels(card_id);
 create index if not exists idx_attachments_card_id on public.attachments(card_id);
 create index if not exists idx_comments_card_id on public.comments(card_id);
-create index if not exists idx_notifications_recipient on public.notifications(recipient_email);
+create index if not exists idx_notifs_recipient on public.notifications(recipient_email);
 
 -- ==============================================================================
--- 15. Row Level Security (RLS)
--- ==============================================================================
--- ==============================================================================
--- 15. Row Level Security (RLS) - Hardened Multi-Tenant Policies
+-- 16. ROW LEVEL SECURITY (RLS) - PERMISSIVE FOR AUTHENTICATED TEAM USERS
 -- ==============================================================================
 alter table public.profiles enable row level security;
 alter table public.boards enable row level security;
@@ -227,169 +253,87 @@ alter table public.comments enable row level security;
 alter table public.notifications enable row level security;
 alter table public.email_logs enable row level security;
 
--- Helper function to check if current user is member or owner of a board
-create or replace function public.is_board_member(board_id text)
-returns boolean as $$
-declare
-  user_email text := lower(coalesce(auth.jwt()->>'email', ''));
-begin
-  if user_email = '' then
-    return false;
-  end if;
+-- Policies for Authenticated Users (Full CRUD for workspace collaborators)
+create policy "Authenticated access to profiles" on public.profiles
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
-  return exists (
-    select 1 from public.boards b
-    where b.id = board_id and lower(b.created_by) = user_email
-  ) or exists (
-    select 1 from public.board_members bm
-    where bm.board_id = board_id and lower(bm.email) = user_email
-  );
-end;
-$$ language plpgsql security definer stable;
+create policy "Authenticated access to boards" on public.boards
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 1. Profiles: Users can view all member profiles, but only update their own
-create policy "Profiles are viewable by authenticated users" on public.profiles
-  for select using (auth.role() = 'authenticated');
-create policy "Users can update own profile" on public.profiles
-  for update using (auth.uid() = id);
+create policy "Authenticated access to board_members" on public.board_members
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 2. Boards: Viewable & editable only by creator or board members
-create policy "Users can view boards they belong to" on public.boards
-  for select using (
-    lower(created_by) = lower(coalesce(auth.jwt()->>'email', ''))
-    or exists (
-      select 1 from public.board_members bm 
-      where bm.board_id = boards.id and lower(bm.email) = lower(coalesce(auth.jwt()->>'email', ''))
-    )
-  );
-create policy "Authenticated users can create boards" on public.boards
-  for insert with check (auth.role() = 'authenticated');
-create policy "Board members can update boards" on public.boards
-  for update using (
-    lower(created_by) = lower(coalesce(auth.jwt()->>'email', ''))
-    or public.is_board_member(id)
-  );
-create policy "Only board owner can delete boards" on public.boards
-  for delete using (lower(created_by) = lower(coalesce(auth.jwt()->>'email', '')));
+create policy "Authenticated access to columns" on public.columns
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 3. Board Members: Scoped to board membership or own email
-create policy "View board members of member boards" on public.board_members
-  for select using (
-    lower(email) = lower(coalesce(auth.jwt()->>'email', ''))
-    or public.is_board_member(board_id)
-  );
-create policy "Board members can add members" on public.board_members
-  for insert with check (
-    lower(email) = lower(coalesce(auth.jwt()->>'email', ''))
-    or public.is_board_member(board_id)
-  );
-create policy "Board members can update members" on public.board_members
-  for update using (public.is_board_member(board_id));
-create policy "Board members can remove members" on public.board_members
-  for delete using (public.is_board_member(board_id));
+create policy "Authenticated access to cards" on public.cards
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 4. Columns: Scoped to board membership
-create policy "View columns of member boards" on public.columns
-  for select using (public.is_board_member(board_id));
-create policy "Manage columns of member boards" on public.columns
-  for all using (public.is_board_member(board_id));
+create policy "Authenticated access to card_assignees" on public.card_assignees
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 5. Cards: Scoped to board membership
-create policy "View cards of member boards" on public.cards
-  for select using (public.is_board_member(board_id));
-create policy "Manage cards of member boards" on public.cards
-  for all using (public.is_board_member(board_id));
+create policy "Authenticated access to card_labels" on public.card_labels
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 6. Card Assignees & Labels
-create policy "Manage card assignees of member boards" on public.card_assignees
-  for all using (
-    exists (select 1 from public.cards c where c.id = card_id and public.is_board_member(c.board_id))
-  );
-create policy "Manage card labels of member boards" on public.card_labels
-  for all using (
-    exists (select 1 from public.cards c where c.id = card_id and public.is_board_member(c.board_id))
-  );
+create policy "Authenticated access to custom_labels" on public.custom_labels
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 7. Custom Labels: Scoped to creator user
-create policy "Manage own custom labels" on public.custom_labels
-  for all using (user_email is null or user_email = auth.jwt()->>'email');
+create policy "Authenticated access to attachments" on public.attachments
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 8. Attachments: Scoped to card's board membership
-create policy "Manage attachments of member boards" on public.attachments
-  for all using (
-    exists (select 1 from public.cards c where c.id = card_id and public.is_board_member(c.board_id))
-  );
+create policy "Authenticated access to comments" on public.comments
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 9. Comments: Scoped to card's board membership
-create policy "Manage comments of member boards" on public.comments
-  for all using (
-    exists (select 1 from public.cards c where c.id = card_id and public.is_board_member(c.board_id))
-  );
+create policy "Authenticated access to notifications" on public.notifications
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
--- 10. Notifications: Scoped strictly to recipient email
-create policy "Users can view and manage their own notifications" on public.notifications
-  for all using (
-    recipient_email = auth.jwt()->>'email'
-    or recipient_id = auth.uid()
-  );
-
--- 11. Email Logs: Scoped to recipient email or board members
-create policy "Users can view their own email logs" on public.email_logs
-  for select using (recipient_email = auth.jwt()->>'email');
-create policy "Insert email logs" on public.email_logs
-  for insert with check (auth.role() = 'authenticated');
+create policy "Authenticated access to email_logs" on public.email_logs
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- ==============================================================================
--- 16. Supabase Storage Buckets & Policies (Private Attachments + Signed URLs)
+-- 17. ENABLE REALTIME BROADCASTING
 -- ==============================================================================
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values (
-  'attachments',
-  'attachments',
-  false, -- PRIVATE BUCKET (Requires Signed URLs / Authenticated Access)
-  5242880, -- 5 MB limit
-  array['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf', 'text/plain', 'application/json']
-)
-on conflict (id) do update 
-set public = false, file_size_limit = 5242880;
-
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values (
-  'avatars',
-  'avatars',
-  true, -- Avatars remain public for fast rendering
-  2097152, -- 2 MB limit
-  array['image/png', 'image/jpeg', 'image/webp', 'image/gif']
-)
-on conflict (id) do update
-set file_size_limit = 2097152;
-
--- Storage policies for Private Attachments
-create policy "Authenticated Access to Attachments" on storage.objects 
-  for select using (bucket_id = 'attachments' and auth.role() = 'authenticated');
-create policy "Authenticated Upload to Attachments" on storage.objects 
-  for insert with check (bucket_id = 'attachments' and auth.role() = 'authenticated');
-create policy "Authenticated Delete from Attachments" on storage.objects 
-  for delete using (bucket_id = 'attachments' and auth.role() = 'authenticated');
-
--- Storage policies for Public Avatars
-create policy "Public Access to Avatars" on storage.objects 
-  for select using (bucket_id = 'avatars');
-create policy "Authenticated Upload to Avatars" on storage.objects 
-  for insert with check (bucket_id = 'avatars' and auth.role() = 'authenticated');
-
--- ==============================================================================
--- 17. Enable Realtime Publications
--- ==============================================================================
--- Add tables to realtime publication so clients receive instant live updates
 do $$
 begin
-  alter publication supabase_realtime add table public.boards;
-  alter publication supabase_realtime add table public.board_members;
-  alter publication supabase_realtime add table public.columns;
-  alter publication supabase_realtime add table public.cards;
-  alter publication supabase_realtime add table public.comments;
-  alter publication supabase_realtime add table public.notifications;
-exception when others then
-  null; -- Ignore if tables are already in the publication
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
 end $$;
+
+alter publication supabase_realtime add table public.boards;
+alter publication supabase_realtime add table public.board_members;
+alter publication supabase_realtime add table public.columns;
+alter publication supabase_realtime add table public.cards;
+alter publication supabase_realtime add table public.card_assignees;
+alter publication supabase_realtime add table public.card_labels;
+alter publication supabase_realtime add table public.comments;
+alter publication supabase_realtime add table public.attachments;
+alter publication supabase_realtime add table public.notifications;
+
+-- ==============================================================================
+-- 18. STORAGE BUCKET FOR ATTACHMENTS
+-- ==============================================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'attachments',
+  'attachments',
+  true,
+  52428800, -- 50MB
+  array['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'application/pdf', 'text/plain', 'application/zip']
+)
+on conflict (id) do update set
+  public = true,
+  file_size_limit = 52428800;
+
+-- Storage Policies for Attachments
+drop policy if exists "Authenticated Uploads" on storage.objects;
+create policy "Authenticated Uploads" on storage.objects
+  for insert with check (bucket_id = 'attachments' and auth.role() = 'authenticated');
+
+drop policy if exists "Public/Authenticated Reads" on storage.objects;
+create policy "Public/Authenticated Reads" on storage.objects
+  for select using (bucket_id = 'attachments');
+
+drop policy if exists "Authenticated Deletes" on storage.objects;
+create policy "Authenticated Deletes" on storage.objects
+  for delete using (bucket_id = 'attachments' and auth.role() = 'authenticated');

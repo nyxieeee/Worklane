@@ -14,6 +14,7 @@ interface Props {
 export default function SearchModal({ onClose, onOpenCard }: Props) {
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const allBoards = useWorkStore(s => s.boards);
   const getVisibleBoards = useWorkStore(s => s.getVisibleBoards);
   const user = useAuthStore(s => s.user);
   const boards = getVisibleBoards(user?.email);

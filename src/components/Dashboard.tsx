@@ -46,6 +46,7 @@ type TaskFilter = 'all' | 'assigned' | 'dueSoon' | 'urgent' | 'completed';
 
 export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: Props) {
   const user               = useAuthStore(s => s.user);
+  const allBoards          = useWorkStore(s => s.boards);
   const getVisibleBoards   = useWorkStore(s => s.getVisibleBoards);
   const deleteBoard        = useWorkStore(s => s.deleteBoard);
   const leaveBoard         = useWorkStore(s => s.leaveBoard);
@@ -67,7 +68,7 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
 
   const [taskFilter, setTaskFilter] = useState<TaskFilter>('all');
 
-  const boards: Board[] = getVisibleBoards(user?.email);
+  const boards: Board[] = useMemo(() => getVisibleBoards(user?.email), [allBoards, user?.email, getVisibleBoards]);
   const notifications = useMemo(() => {
     if (!user?.email) return rawNotifications.filter(n => !n.recipientEmail);
     const email = user.email.toLowerCase().trim();

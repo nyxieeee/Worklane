@@ -372,18 +372,44 @@ export const supabaseService = {
 
         // Card Comments & Replies
         if (card.comments?.length) {
-          const cmRows = card.comments.map(cm => ({
-            id: cm.id,
-            card_id: card.id,
-            parent_id: cm.parentId || null,
-            reply_to_author: cm.replyToAuthor || null,
-            author: cm.author,
-            author_initials: cm.authorInitials || 'U',
-            avatar_color: cm.avatarColor || '#6366f1',
-            text: cm.text,
-            created_at: cm.createdAt || new Date().toISOString(),
-          }));
-          await supabase.from('comments').upsert(cmRows, { onConflict: 'id' });
+          // 1. First upsert parent / root comments
+          const rootComments = card.comments
+            .filter(cm => !cm.parentId)
+            .map(cm => ({
+              id: cm.id,
+              card_id: card.id,
+              parent_id: null,
+              reply_to_author: null,
+              author: cm.author,
+              author_initials: cm.authorInitials || 'U',
+              avatar_color: cm.avatarColor || '#6366f1',
+              text: cm.text,
+              created_at: cm.createdAt || new Date().toISOString(),
+            }));
+          if (rootComments.length > 0) {
+            const { error: rErr } = await supabase.from('comments').upsert(rootComments, { onConflict: 'id' });
+            if (rErr) console.warn('[SupabaseService] Root comments upsert warning:', rErr);
+          }
+
+          // 2. Second upsert replies with parent_id
+          const replies = card.comments
+            .filter(cm => cm.parentId)
+            .map(cm => ({
+              id: cm.id,
+              card_id: card.id,
+              parent_id: cm.parentId,
+              reply_to_author: cm.replyToAuthor || null,
+              author: cm.author,
+              author_initials: cm.authorInitials || 'U',
+              avatar_color: cm.avatarColor || '#6366f1',
+              text: cm.text,
+              created_at: cm.createdAt || new Date().toISOString(),
+            }));
+          if (replies.length > 0) {
+            const { error: repErr } = await supabase.from('comments').upsert(replies, { onConflict: 'id' });
+            if (repErr) console.warn('[SupabaseService] Replies upsert warning:', repErr);
+          }
+
           const currentCmIds = card.comments.map(c => c.id).filter(Boolean);
           if (currentCmIds.length > 0) {
             await supabase.from('comments').delete().eq('card_id', card.id).not('id', 'in', `(${currentCmIds.join(',')})`);
@@ -403,7 +429,9 @@ export const supabaseService = {
             data_url: att.dataUrl || '',
             added_at: att.addedAt || new Date().toISOString(),
           }));
-          await supabase.from('attachments').upsert(attRows, { onConflict: 'id' });
+          const { error: attErr } = await supabase.from('attachments').upsert(attRows, { onConflict: 'id' });
+          if (attErr) console.warn('[SupabaseService] Attachments upsert warning:', attErr);
+
           const currentAttIds = card.attachments.map(a => a.id).filter(Boolean);
           if (currentAttIds.length > 0) {
             await supabase.from('attachments').delete().eq('card_id', card.id).not('id', 'in', `(${currentAttIds.join(',')})`);

@@ -33,6 +33,7 @@ interface AuthState {
   signUpWithGoogle: (name: string, email: string) => Promise<{ success: boolean; error?: string }>;
   signInWithGoogle: (email?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<{ success: boolean; error?: string }>;
 }
 
 function hashPassword(pass: string): string {
@@ -274,6 +275,39 @@ export const useAuthStore = create<AuthState>()(
           }
         }
         set({ user: null, isAuthenticated: false });
+      },
+
+      deleteAccount: async () => {
+        const { user, accounts } = get();
+        if (!user) return { success: true };
+
+        try {
+          // 1. Delete from Supabase profiles, board_members, notifications & auth
+          if (isSupabaseConfigured()) {
+            await supabaseService.deleteAccount({ id: user.id, email: user.email });
+          }
+
+          // 2. Remove from local accounts list
+          const updatedAccounts = accounts.filter(
+            a => a.email.toLowerCase() !== user.email.toLowerCase()
+          );
+
+          set({
+            user: null,
+            isAuthenticated: false,
+            accounts: updatedAccounts,
+          });
+
+          // 3. Clear session storage items
+          try {
+            sessionStorage.clear();
+          } catch {}
+
+          return { success: true };
+        } catch (err: any) {
+          console.error('[AuthStore] Error deleting account:', err);
+          return { success: false, error: err.message || 'Failed to delete account' };
+        }
       },
     }),
     { name: 'worklane_auth_store_v4' }

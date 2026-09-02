@@ -501,6 +501,60 @@ export const supabaseService = {
   },
 
   /**
+   * Delete or deactivate user account, removing their profile, board memberships, and notifications
+   */
+  async deleteAccount(user: { id: string; email: string }): Promise<boolean> {
+    if (!isSupabaseConfigured() || !user?.email) return true;
+    try {
+      const cleanEmail = user.email.toLowerCase().trim();
+
+      // 1. Try calling the RPC function first
+      try {
+        const { error: rpcErr } = await supabase.rpc('delete_user_account');
+        if (!rpcErr) {
+          await supabase.auth.signOut();
+          return true;
+        }
+      } catch (e) {
+        // Fallback to table deletions
+      }
+
+      // 2. Fallback manual table deletions
+      // Delete from board_members
+      await supabase
+        .from('board_members')
+        .delete()
+        .ilike('email', cleanEmail);
+
+      // Delete from notifications
+      await supabase
+        .from('notifications')
+        .delete()
+        .ilike('recipient_email', cleanEmail);
+
+      // Delete from profiles
+      if (user.id && !user.id.startsWith('user_') && !user.id.startsWith('goog_')) {
+        await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', user.id);
+      } else {
+        await supabase
+          .from('profiles')
+          .delete()
+          .ilike('email', cleanEmail);
+      }
+
+      // 3. Sign out auth session
+      await supabase.auth.signOut();
+      return true;
+    } catch (err) {
+      console.error('[SupabaseService] Error deleting account:', err);
+      return false;
+    }
+  },
+
+  /**
    * Fetch all registered profiles (useful for initial picker)
    */
   async getAllRegisteredProfiles(): Promise<Array<{ id: string; name: string; email: string; avatarUrl?: string }>> {

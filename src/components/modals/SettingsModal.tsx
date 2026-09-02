@@ -13,6 +13,7 @@ import { useNotifStore } from '../../store/useNotifStore';
 import { useEmailStore } from '../../store/useEmailStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useToastStore } from '../../store/useToastStore';
+import { useConfirmStore } from '../../store/useConfirmStore';
 import { avatarInitials, formatTime, formatBytes } from '../../utils';
 import { LABELS } from '../../types';
 
@@ -39,7 +40,9 @@ export default function SettingsModal({ initialTab = 'appearance', onClose }: Pr
   const notifications = useNotifStore(s => s.notifications);
   const clearNotifications = useNotifStore(s => s.clearAll);
   const user = useAuthStore(s => s.user);
+  const deleteAccount = useAuthStore(s => s.deleteAccount);
   const showToast = useToastStore(s => s.showToast);
+  const showConfirm = useConfirmStore(s => s.showConfirm);
 
   const boards = getVisibleBoards(user?.email);
 
@@ -637,6 +640,97 @@ export default function SettingsModal({ initialTab = 'appearance', onClose }: Pr
                     </motion.button>
                     <input ref={fileInputRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportData} />
                   </label>
+                </div>
+
+                {/* Account & Profile Details */}
+                {user && (
+                  <div
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: 'var(--radius)',
+                      backgroundColor: 'hsl(var(--card))',
+                      boxShadow: 'var(--neu-shadow-raised-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt={user.name} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: 'hsl(var(--primary))', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13 }}>
+                          {avatarInitials(user.name || user.email)}
+                        </div>
+                      )}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--foreground))' }}>{user.name || 'Worklane User'}</div>
+                        <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>{user.email} • {user.provider === 'google' ? 'Google Auth' : 'Email Auth'}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Danger Zone: Account Deletion & Deactivation */}
+                <div
+                  style={{
+                    padding: '14px',
+                    borderRadius: 'var(--radius)',
+                    backgroundColor: 'hsl(var(--destructive) / 0.06)',
+                    border: '1px solid hsl(var(--destructive) / 0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'hsl(var(--destructive))', fontWeight: 700, fontSize: 13 }}>
+                    <AlertTriangle size={15} />
+                    <span>Danger Zone: Deactivate & Delete Account</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 11.5, color: 'hsl(var(--muted-foreground))', lineHeight: 1.45 }}>
+                    Permanently delete your profile and account from Supabase. All your workspace memberships, profile data, and notifications will be wiped from the database immediately.
+                  </p>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    onClick={() => {
+                      if (!user?.email) return;
+                      showConfirm({
+                        title: 'Delete Account & Profile Permanently?',
+                        message: `Are you sure you want to delete your account (${user.email})? Your profile, notifications, and all board memberships will be erased from Supabase. This action cannot be undone.`,
+                        confirmText: 'Delete Account Forever',
+                        variant: 'danger',
+                        icon: 'trash',
+                        onConfirm: async () => {
+                          const res = await deleteAccount();
+                          if (res.success) {
+                            showToast('Your account and profile have been permanently deleted.', 'info');
+                            onClose();
+                          } else {
+                            showToast(res.error || 'Failed to delete account', 'error');
+                          }
+                        }
+                      });
+                    }}
+                    className="btn"
+                    style={{
+                      alignSelf: 'flex-start',
+                      backgroundColor: 'hsl(var(--destructive))',
+                      color: '#fff',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      gap: 6,
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: 'var(--neu-shadow-raised-sm)',
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    <span>Delete Account & Profile</span>
+                  </motion.button>
                 </div>
               </div>
             )}

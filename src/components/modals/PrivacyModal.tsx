@@ -1,11 +1,12 @@
 import React, { useRef } from 'react';
-import { Shield, X, Download, Upload, Trash2, Database, HardDrive, CheckCircle2 } from 'lucide-react';
+import { Shield, X, Download, Upload, Trash2, Database, HardDrive, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useWorkStore } from '../../store/useWorkStore';
 import { useNotifStore } from '../../store/useNotifStore';
 import { useEmailStore } from '../../store/useEmailStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useToastStore } from '../../store/useToastStore';
+import { useConfirmStore } from '../../store/useConfirmStore';
 
 interface Props {
   onClose: () => void;
@@ -16,7 +17,9 @@ export default function PrivacyModal({ onClose }: Props) {
   const notifications = useNotifStore(s => s.notifications);
   const clearNotifications = useNotifStore(s => s.clearAll);
   const user = useAuthStore(s => s.user);
+  const deleteAccount = useAuthStore(s => s.deleteAccount);
   const showToast = useToastStore(s => s.showToast);
+  const showConfirm = useConfirmStore(s => s.showConfirm);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const boards = getVisibleBoards(user?.email);
@@ -185,6 +188,71 @@ export default function PrivacyModal({ onClose }: Props) {
                 <Trash2 size={14} />
                 <span>Clear Notification History</span>
               </motion.button>
+            )}
+
+            {/* Danger Zone: Account Deletion */}
+            {user && (
+              <div
+                style={{
+                  marginTop: 6,
+                  padding: '12px 14px',
+                  borderRadius: 'var(--radius)',
+                  backgroundColor: 'hsl(var(--destructive) / 0.06)',
+                  border: '1px solid hsl(var(--destructive) / 0.25)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'hsl(var(--destructive))', fontWeight: 700, fontSize: 12.5 }}>
+                  <AlertTriangle size={14} />
+                  <span>Delete & Deactivate Account</span>
+                </div>
+                <p style={{ margin: 0, fontSize: 11, color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
+                  Permanently erase your account, profile, notifications, and board memberships from the database.
+                </p>
+                <motion.button
+                  whileTap={{ scale: 0.96 }}
+                  type="button"
+                  onClick={() => {
+                    if (!user?.email) return;
+                    showConfirm({
+                      title: 'Delete Account Permanently?',
+                      message: `Are you sure you want to delete your account (${user.email})? All your profile information and board memberships will be erased from the database.`,
+                      confirmText: 'Delete Account Forever',
+                      variant: 'danger',
+                      icon: 'trash',
+                      onConfirm: async () => {
+                        const res = await deleteAccount();
+                        if (res.success) {
+                          showToast('Account permanently deleted.', 'info');
+                          onClose();
+                        } else {
+                          showToast(res.error || 'Failed to delete account', 'error');
+                        }
+                      }
+                    });
+                  }}
+                  className="btn"
+                  style={{
+                    alignSelf: 'flex-start',
+                    backgroundColor: 'hsl(var(--destructive))',
+                    color: '#fff',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    gap: 6,
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    border: 'none',
+                    cursor: 'pointer',
+                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                    marginTop: 2,
+                  }}
+                >
+                  <Trash2 size={12} />
+                  <span>Delete My Account</span>
+                </motion.button>
+              </div>
             )}
           </div>
         </div>

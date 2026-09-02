@@ -340,3 +340,32 @@ create policy "Public/Authenticated Reads" on storage.objects
 drop policy if exists "Authenticated Deletes" on storage.objects;
 create policy "Authenticated Deletes" on storage.objects
   for delete using (bucket_id = 'attachments' and auth.role() = 'authenticated');
+
+-- ==============================================================================
+-- 19. ACCOUNT DELETION & DEACTIVATION RPC
+-- ==============================================================================
+create or replace function public.delete_user_account()
+returns void as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_email text;
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+  
+  select email into v_email from auth.users where id = v_user_id;
+  
+  -- 1. Remove user from board memberships
+  if v_email is not null then
+    delete from public.board_members where email ilike v_email;
+    delete from public.notifications where recipient_email ilike v_email;
+  end if;
+  
+  -- 2. Delete user profile record
+  delete from public.profiles where id = v_user_id;
+  
+  -- 3. Delete user from auth.users
+  delete from auth.users where id = v_user_id;
+end;
+$$ language plpgsql security definer;

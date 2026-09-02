@@ -4,7 +4,7 @@ import {
   Trash2, CheckSquare, Square, Download, X, Send, Plus, Check,
   Eye, Image as ImageIcon, Maximize2, AtSign, Reply, Sparkles,
   FileSpreadsheet, FileText, FileCode, FileArchive, File, Lock,
-  Edit3
+  Edit3, Crown, Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -882,6 +882,32 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                 <span style={{ fontSize: 12.5, fontWeight: 700, color: 'hsl(var(--foreground))' }}>
                                   {c.author}
                                 </span>
+                                {(() => {
+                                  const cMem = members.find(m => m.name.toLowerCase().trim() === c.author.toLowerCase().trim() || (m.email && m.email.toLowerCase().trim() === c.author.toLowerCase().trim()));
+                                  const isOwn = !!(cMem?.email && board.createdBy && cMem.email.toLowerCase().trim() === board.createdBy.toLowerCase().trim());
+                                  if (isOwn) {
+                                    return (
+                                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                        <Crown size={9} /> Owner
+                                      </span>
+                                    );
+                                  }
+                                  if (cMem?.role === 'admin') {
+                                    return (
+                                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                        <Shield size={9} /> Admin
+                                      </span>
+                                    );
+                                  }
+                                  if (cMem?.role === 'observer') {
+                                    return (
+                                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                        <Eye size={9} /> Observer
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                               <span style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))' }}>
                                 {formatTime(c.createdAt)}
@@ -964,6 +990,25 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                       <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>
                                         {reply.author}
                                       </span>
+                                      {(() => {
+                                        const rMem = members.find(m => m.name.toLowerCase().trim() === reply.author.toLowerCase().trim() || (m.email && m.email.toLowerCase().trim() === reply.author.toLowerCase().trim()));
+                                        const isROwn = !!(rMem?.email && board.createdBy && rMem.email.toLowerCase().trim() === board.createdBy.toLowerCase().trim());
+                                        if (isROwn) {
+                                          return (
+                                            <span style={{ fontSize: 8.5, fontWeight: 700, padding: '1px 4px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                              <Crown size={8} /> Owner
+                                            </span>
+                                          );
+                                        }
+                                        if (rMem?.role === 'admin') {
+                                          return (
+                                            <span style={{ fontSize: 8.5, fontWeight: 700, padding: '1px 4px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                              <Shield size={8} /> Admin
+                                            </span>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
                                       {reply.replyToAuthor && (
                                         <span style={{ fontSize: 10.5, color: 'hsl(var(--primary))' }}>
                                           → @{reply.replyToAuthor}
@@ -1252,6 +1297,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                     const isCurrent = currentUser?.email && m.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
                     const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
                     const isAssigned = card.assignees?.includes(m.id);
+                    const isMemberOwner = !!(board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim());
 
                     return (
                       <motion.button
@@ -1269,11 +1315,19 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                           </div>
                         )}
                         <span style={{ flex: 1, textAlign: 'left' }}>{displayName}</span>
-                        {m.role === 'admin' && (
-                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))' }}>
-                            Admin
+                        {isMemberOwner ? (
+                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Crown size={10} /> Owner
                           </span>
-                        )}
+                        ) : m.role === 'admin' ? (
+                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Shield size={10} /> Admin
+                          </span>
+                        ) : m.role === 'observer' ? (
+                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Eye size={10} /> Observer
+                          </span>
+                        ) : null}
                         {isAssigned && <CheckSquare size={13} color="hsl(var(--primary))" />}
                       </motion.button>
                     );
@@ -1286,6 +1340,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                     card.assignees.map(mId => {
                       const m = members.find(mem => mem.id === mId);
                       if (!m) return null;
+                      const isMemOwner = !!(board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim());
                       return (
                         <div
                           key={m.id}
@@ -1307,7 +1362,20 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                               {avatarInitials(m.name)}
                             </div>
                           )}
-                          <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>{m.name}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))', flex: 1 }}>{m.name}</span>
+                          {isMemOwner ? (
+                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <Crown size={10} /> Owner
+                            </span>
+                          ) : m.role === 'admin' ? (
+                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <Shield size={10} /> Admin
+                            </span>
+                          ) : m.role === 'observer' ? (
+                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <Eye size={10} /> Observer
+                            </span>
+                          ) : null}
                         </div>
                       );
                     })

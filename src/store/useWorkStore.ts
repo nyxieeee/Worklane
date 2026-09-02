@@ -164,31 +164,22 @@ export const useWorkStore = create<WorkState>()(
         if (!userEmail || !supabaseService.isConfigured()) return;
         const cleanEmail = userEmail.toLowerCase().trim();
 
+        set({ isLoadingCloud: true });
+
         try {
           const cloudBoards = await supabaseService.getBoardsForUser(cleanEmail);
-          
-          // If local store has boards that are not yet in the cloud, upload them to Supabase
-          const currentLocalBoards = get().boards;
-          if (currentLocalBoards && currentLocalBoards.length > 0) {
-            currentLocalBoards.forEach(localB => {
-              const isAlreadyInCloud = cloudBoards && cloudBoards.some(cb => cb.id === localB.id);
-              if (!isAlreadyInCloud) {
-                const boardToUpload: Board = {
-                  ...localB,
-                  createdBy: localB.createdBy || cleanEmail,
-                };
-                supabaseService.syncBoard(boardToUpload);
-              }
-            });
-          }
 
-          if (!cloudBoards) return;
+          if (!cloudBoards) {
+            set({ isLoadingCloud: false });
+            return;
+          }
 
           set(s => {
             const now = Date.now();
-            // Merge cloud boards with local boards:
-            // If a local board is currently pending sync or was mutated within the last 3500ms, keep the local version!
-            const mergedBoards = cloudBoards.map(cb => {
+
+            // Cloud data is always authoritative UNLESS a mutation is in-flight
+            // (user just made an edit on this device in the last 3.5s)
+            const finalBoards = cloudBoards.map(cb => {
               const hasPendingSync = syncTimers.has(cb.id) || activeSyncs.has(cb.id);
               const lastMutation = lastLocalMutationTime.get(cb.id) || 0;
               const isRecentMutation = (now - lastMutation) < 3500;
@@ -196,37 +187,29 @@ export const useWorkStore = create<WorkState>()(
               if (hasPendingSync || isRecentMutation) {
                 const localBoard = s.boards.find(lb => lb.id === cb.id);
                 if (localBoard) {
-                  return {
-                    ...localBoard,
-                    members: cb.members,
-                  };
+                  // Keep local data but always update members from cloud (for fresh avatar/role updates)
+                  return { ...localBoard, members: cb.members };
                 }
               }
               return cb;
             });
 
-            // Only keep a local board not returned by cloud query IF it has a pending sync or was created in the last 5 seconds
+            // Include locally-created boards not yet returned by cloud ONLY if recently created
             s.boards.forEach(lb => {
               const hasPendingSync = syncTimers.has(lb.id) || activeSyncs.has(lb.id);
               const lastMutation = lastLocalMutationTime.get(lb.id) || 0;
-              const isRecentMutation = (now - lastMutation) < 5000;
+              const isRecentCreate = (now - lastMutation) < 8000;
 
-              if ((hasPendingSync || isRecentMutation) && !mergedBoards.some(b => b.id === lb.id)) {
-                mergedBoards.push(lb);
+              if ((hasPendingSync || isRecentCreate) && !finalBoards.some(b => b.id === lb.id)) {
+                finalBoards.push(lb);
               }
             });
 
-            const activeBoardId = s.activeBoardId && mergedBoards.some(b => b.id === s.activeBoardId)
+            const activeBoardId = s.activeBoardId && finalBoards.some(b => b.id === s.activeBoardId)
               ? s.activeBoardId
-              : (mergedBoards[0]?.id ?? null);
+              : (finalBoards[0]?.id ?? null);
 
-            // Avoid redundant re-renders if boards payload has not changed
-            const isUnchanged = JSON.stringify(s.boards) === JSON.stringify(mergedBoards) && s.activeBoardId === activeBoardId;
-            if (isUnchanged) {
-              return { isLoadingCloud: false };
-            }
-
-            return { boards: mergedBoards, activeBoardId, isLoadingCloud: false };
+            return { boards: finalBoards, activeBoardId, isLoadingCloud: false };
           });
         } catch (err) {
           console.warn('[useWorkStore] Cloud load error:', err);

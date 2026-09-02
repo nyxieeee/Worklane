@@ -512,6 +512,12 @@ export const useAuthStore = create<AuthState>()(
             console.warn('[Supabase Auth] SignOut error:', e);
           }
         }
+        // Clear work state so a different user logging in on the same device
+        // doesn't see the previous user's boards from localStorage
+        try {
+          const { useWorkStore } = await import('./useWorkStore');
+          useWorkStore.setState({ boards: [], activeBoardId: null, lastMoveSnapshot: null });
+        } catch {}
         set({ user: null, isAuthenticated: false });
       },
 

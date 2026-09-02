@@ -459,16 +459,17 @@ export const supabaseService = {
         }
       }
 
-      // Delete removed cards
+      // Delete orphaned cards (cards that were removed) - only if we actually synced some cards
+      // IMPORTANT: Never wipe all cards by deleting with empty currentCardIds
       if (currentCardIds.length > 0) {
         await supabase
           .from('cards')
           .delete()
           .eq('board_id', board.id)
           .not('id', 'in', `(${currentCardIds.join(',')})`);
-      } else if (board.columns?.length > 0 || board.inboxCards?.length) {
-        await supabase.from('cards').delete().eq('board_id', board.id);
       }
+      // Note: If currentCardIds is empty (no cards), we intentionally skip deletion
+      // to prevent accidentally wiping cloud cards when local state hasn't loaded yet
 
       return true;
     } catch (err) {

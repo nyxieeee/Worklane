@@ -205,9 +205,13 @@ export const useWorkStore = create<WorkState>()(
               return cb;
             });
 
-            // Also keep any local boards that are newly created and not yet returned by cloud query
+            // Only keep a local board not returned by cloud query IF it has a pending sync or was created in the last 5 seconds
             s.boards.forEach(lb => {
-              if (!mergedBoards.some(b => b.id === lb.id)) {
+              const hasPendingSync = syncTimers.has(lb.id) || activeSyncs.has(lb.id);
+              const lastMutation = lastLocalMutationTime.get(lb.id) || 0;
+              const isRecentMutation = (now - lastMutation) < 5000;
+
+              if ((hasPendingSync || isRecentMutation) && !mergedBoards.some(b => b.id === lb.id)) {
                 mergedBoards.push(lb);
               }
             });
@@ -501,6 +505,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
+        supabaseService.deleteCard(cardId);
         if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 

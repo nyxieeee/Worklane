@@ -761,22 +761,11 @@ export const supabaseService = {
   },
 
   /**
-   * Delete a board from Supabase (cascades cleanly through all child tables)
+   * Delete a board from Supabase (cascades cleanly through foreign keys)
    */
   async deleteBoard(boardId: string): Promise<boolean> {
     if (!isSupabaseConfigured() || !boardId) return false;
     try {
-      // 1. Delete associated children explicitly first (failsafe for foreign keys)
-      await supabase.from('card_assignees').delete().eq('board_id', boardId);
-      await supabase.from('card_labels').delete().eq('board_id', boardId);
-      await supabase.from('comments').delete().eq('board_id', boardId);
-      await supabase.from('attachments').delete().eq('board_id', boardId);
-      await supabase.from('cards').delete().eq('board_id', boardId);
-      await supabase.from('columns').delete().eq('board_id', boardId);
-      await supabase.from('board_members').delete().eq('board_id', boardId);
-      await supabase.from('custom_labels').delete().eq('board_id', boardId);
-
-      // 2. Delete the board itself
       const { error } = await supabase.from('boards').delete().eq('id', boardId);
       if (error) {
         console.error('[SupabaseService] Error deleting board:', error);
@@ -785,6 +774,24 @@ export const supabaseService = {
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error deleting board:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Delete a single card from Supabase (cascades cleanly through attachments, comments, labels, assignees)
+   */
+  async deleteCard(cardId: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !cardId) return false;
+    try {
+      const { error } = await supabase.from('cards').delete().eq('id', cardId);
+      if (error) {
+        console.error('[SupabaseService] Error deleting card:', error);
+        throw error;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Error deleting card:', err);
       return false;
     }
   },

@@ -158,15 +158,11 @@ export default function App() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 5-second background sync fallback
-    const interval = setInterval(handleFocusSync, 5000);
-
     return () => {
       if (boardsDebounceTimer) clearTimeout(boardsDebounceTimer);
       unsub();
       window.removeEventListener('focus', handleFocusSync);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(interval);
     };
   }, [currentUser?.email, loadBoardsFromCloud, loadNotificationsFromCloud]);
 

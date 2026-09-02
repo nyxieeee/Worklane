@@ -216,6 +216,12 @@ export const useWorkStore = create<WorkState>()(
               ? s.activeBoardId
               : (mergedBoards[0]?.id ?? null);
 
+            // Avoid redundant re-renders if boards payload has not changed
+            const isUnchanged = JSON.stringify(s.boards) === JSON.stringify(mergedBoards) && s.activeBoardId === activeBoardId;
+            if (isUnchanged) {
+              return { isLoadingCloud: false };
+            }
+
             return { boards: mergedBoards, activeBoardId, isLoadingCloud: false };
           });
         } catch (err) {

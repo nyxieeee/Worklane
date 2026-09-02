@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import type { Board, Column, Card, Member, MemberRole, Attachment, Comment } from '../types';
 import { AVATAR_COLORS, LABELS } from '../types';
 import { uid, avatarInitials } from '../utils';
@@ -149,11 +148,10 @@ export function scheduleBoardSync(board: Board, delayMs = 350) {
   syncTimers.set(board.id, timer);
 }
 
-// ── Zustand Store (Persistent Cache + Supabase Real-Time Sync) ───────────────
+// ── Zustand Store (Cloud-Only, No localStorage) ─────────────────────────────
 
 export const useWorkStore = create<WorkState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       boards: [],
       activeBoardId: null,
       lastMoveSnapshot: null,
@@ -174,27 +172,27 @@ export const useWorkStore = create<WorkState>()(
             return;
           }
 
+          // Supabase is the single source of truth.
+          // Only preserve in-memory boards that are mid-sync (user just created/edited them)
           set(s => {
             const now = Date.now();
 
-            // Cloud data is always authoritative UNLESS a mutation is in-flight
-            // (user just made an edit on this device in the last 3.5s)
             const finalBoards = cloudBoards.map(cb => {
               const hasPendingSync = syncTimers.has(cb.id) || activeSyncs.has(cb.id);
               const lastMutation = lastLocalMutationTime.get(cb.id) || 0;
               const isRecentMutation = (now - lastMutation) < 3500;
 
               if (hasPendingSync || isRecentMutation) {
-                const localBoard = s.boards.find(lb => lb.id === cb.id);
-                if (localBoard) {
-                  // Keep local data but always update members from cloud (for fresh avatar/role updates)
-                  return { ...localBoard, members: cb.members };
+                const memBoard = s.boards.find(lb => lb.id === cb.id);
+                if (memBoard) {
+                  // Keep in-flight local version, but sync members from cloud
+                  return { ...memBoard, members: cb.members };
                 }
               }
               return cb;
             });
 
-            // Include locally-created boards not yet returned by cloud ONLY if recently created
+            // Include newly created boards that haven't propagated to cloud yet
             s.boards.forEach(lb => {
               const hasPendingSync = syncTimers.has(lb.id) || activeSyncs.has(lb.id);
               const lastMutation = lastLocalMutationTime.get(lb.id) || 0;
@@ -1077,7 +1075,5 @@ export const useWorkStore = create<WorkState>()(
         if (!res) return null;
         return { card: res.card, column: res.column, board: targetBoard, isInbox: res.isInbox };
       },
-    }),
-    { name: 'worklane_data_v4' }
-  )
+    })
 );

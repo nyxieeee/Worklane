@@ -112,10 +112,16 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const allLabels = [...LABELS, ...customLabels];
 
   const currentEmail = currentUser?.email?.toLowerCase().trim();
-  const isOwner = !!(board.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail);
+  const isOwner = !!(
+    (board.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail) ||
+    members.some(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail && m.role === 'owner')
+  );
   const currentMemberObj = members.find(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
-  const isAdmin = !isOwner && currentMemberObj?.role === 'admin';
-  const canAssign = isOwner || isAdmin || !board.createdBy;
+  const isAdmin = isOwner || currentMemberObj?.role === 'admin';
+  const isObserver = currentMemberObj?.role === 'observer';
+
+  // Anyone with board access (Owner, Admin, Member) can assign tasks! Only read-only Observers are restricted.
+  const canAssign = !isObserver;
 
   // ── Local title & description state with unsaved change tracking ──
   const [localTitle, setLocalTitle] = useState(card.title);
@@ -1368,7 +1374,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                 </label>
                 {!canAssign && (
                   <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
-                    Owner & Admin only
+                    Observer Mode (Read-only)
                   </span>
                 )}
               </div>
@@ -1467,7 +1473,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                     <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Unassigned</span>
                   )}
                   <div style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Lock size={11} /> Only the board owner or admins can assign team members.
+                    <Lock size={11} /> Observer mode is read-only. Ask an admin or member to assign team members.
                   </div>
                 </div>
               )}

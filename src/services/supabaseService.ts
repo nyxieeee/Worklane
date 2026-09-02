@@ -695,9 +695,14 @@ export const supabaseService = {
         .from('board_members')
         .update({ role })
         .eq('board_id', boardId)
-        .eq('id', memberId);
+        .or(`id.eq.${memberId},email.eq.${memberId}`);
       if (error) throw error;
-      this.broadcastUpdate('boards', { boardId });
+
+      try {
+        await supabase.from('boards').update({ updated_at: new Date().toISOString() }).eq('id', boardId);
+      } catch {}
+
+      await this.broadcastUpdate('boards', { boardId });
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error updating member role:', err);

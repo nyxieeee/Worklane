@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Bell, Users, Mail, Search, LogOut, Shield, ChevronRight, Settings, Inbox } from 'lucide-react';
+import { Bell, Users, Mail, Search, LogOut, Shield, ChevronRight, Settings, Inbox, Crown, Eye, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useNotifStore } from '../store/useNotifStore';
@@ -312,13 +312,23 @@ export default function Topbar({
                       </div>
                     )}
                     {board && (
-                      <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>
                         {board.createdBy && user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim() ? (
-                          <span style={{ color: 'hsl(var(--primary))' }}>👑 Board Owner</span>
+                          <span style={{ color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Crown size={11} /> Board Owner
+                          </span>
+                        ) : board.members?.find(m => m.email && m.email.toLowerCase().trim() === user?.email?.toLowerCase().trim())?.role === 'admin' ? (
+                          <span style={{ color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Shield size={11} /> Admin
+                          </span>
                         ) : board.members?.find(m => m.email && m.email.toLowerCase().trim() === user?.email?.toLowerCase().trim())?.role === 'observer' ? (
-                          <span style={{ color: '#f59e0b' }}>👁️ Observer (Intern)</span>
+                          <span style={{ color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Eye size={11} /> Observer (Intern)
+                          </span>
                         ) : (
-                          <span style={{ color: 'hsl(var(--muted-foreground))' }}>👤 Team Member</span>
+                          <span style={{ color: 'hsl(var(--muted-foreground))', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <User size={11} /> Team Member
+                          </span>
                         )}
                       </div>
                     )}

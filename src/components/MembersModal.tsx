@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus, Camera, Trash2, LogOut } from 'lucide-react';
+import { X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye, Crown, Info } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useToastStore } from '../store/useToastStore';
@@ -8,10 +8,25 @@ import { useNotifStore } from '../store/useNotifStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useEmailStore } from '../store/useEmailStore';
 import { avatarInitials, uid } from '../utils';
+import { NeumorphicSelect, SelectOption } from './ui/NeumorphicSelect';
+import { MemberRole } from '../types';
 
 interface Props {
   onClose: () => void;
 }
+
+type AssignableRole = 'admin' | 'member' | 'observer';
+
+const OWNER_ROLE_OPTIONS: SelectOption<AssignableRole>[] = [
+  { value: 'admin', label: 'Admin', subLabel: 'Full board management', icon: <Shield size={13} />, color: 'hsl(var(--primary))' },
+  { value: 'member', label: 'Member', subLabel: 'Active team member', icon: <User size={13} />, color: 'hsl(var(--foreground))' },
+  { value: 'observer', label: 'Observer', subLabel: 'Intern / Architecture study', icon: <Eye size={13} />, color: '#f59e0b' },
+];
+
+const ADMIN_ROLE_OPTIONS: SelectOption<AssignableRole>[] = [
+  { value: 'member', label: 'Member', subLabel: 'Active team member', icon: <User size={13} />, color: 'hsl(var(--foreground))' },
+  { value: 'observer', label: 'Observer', subLabel: 'Intern / Architecture study', icon: <Eye size={13} />, color: '#f59e0b' },
+];
 
 export default function MembersModal({ onClose }: Props) {
   const board = useWorkStore(s => s.getActiveBoard());
@@ -223,75 +238,53 @@ export default function MembersModal({ onClose }: Props) {
                       {/* Role Selector / Badge */}
                       <div>
                         {isMemberOwner ? (
-                          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))' }}>
-                            👑 Owner
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '4px 9px',
+                              borderRadius: 8,
+                              backgroundColor: 'hsl(var(--primary) / 0.15)',
+                              color: 'hsl(var(--primary))',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              boxShadow: 'var(--neu-shadow-raised-sm)',
+                            }}
+                          >
+                            <Crown size={12} strokeWidth={2.5} /> Owner
                           </span>
                         ) : isOwner ? (
                           // Owner can assign Admin, Member, or Observer
-                          <select
+                          <NeumorphicSelect
                             value={m.role || 'member'}
-                            onChange={(e) => {
-                              const newRole = e.target.value as 'admin' | 'member' | 'observer';
+                            options={OWNER_ROLE_OPTIONS}
+                            size="sm"
+                            onChange={(newRole) => {
                               updateMemberRole(board.id, m.id, newRole);
                               const roleLabel = newRole === 'admin' ? 'Admin' : newRole === 'observer' ? 'Observer (Intern)' : 'Member';
                               showToast(`${m.name}'s role updated to ${roleLabel}`, 'success');
                             }}
-                            style={{
-                              fontSize: 11.5,
-                              fontWeight: 600,
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              border: '1px solid hsl(var(--border))',
-                              background: m.role === 'admin'
-                                ? 'hsl(var(--primary) / 0.18)'
-                                : m.role === 'observer'
-                                ? 'hsl(38 92% 50% / 0.15)'
-                                : 'hsl(var(--card))',
-                              color: m.role === 'admin'
-                                ? 'hsl(var(--primary))'
-                                : m.role === 'observer'
-                                ? '#f59e0b'
-                                : 'hsl(var(--foreground))',
-                              cursor: 'pointer',
-                              outline: 'none',
-                            }}
-                          >
-                            <option value="admin">⭐ Admin (Full Board Access)</option>
-                            <option value="member">👤 Member (Active)</option>
-                            <option value="observer">👁️ Observer (Intern)</option>
-                          </select>
+                          />
                         ) : isAdmin ? (
                           // Admin can change roles between Member and Observer
-                          <select
-                            value={m.role || 'member'}
-                            onChange={(e) => {
-                              const newRole = e.target.value as 'member' | 'observer';
+                          <NeumorphicSelect
+                            value={m.role === 'observer' ? 'observer' : 'member'}
+                            options={ADMIN_ROLE_OPTIONS}
+                            size="sm"
+                            onChange={(newRole) => {
                               updateMemberRole(board.id, m.id, newRole);
                               showToast(`${m.name}'s role updated to ${newRole === 'observer' ? 'Observer (Intern)' : 'Member'}`, 'success');
                             }}
-                            style={{
-                              fontSize: 11.5,
-                              fontWeight: 600,
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              border: '1px solid hsl(var(--border))',
-                              background: (m.role === 'observer') ? 'hsl(38 92% 50% / 0.15)' : 'hsl(var(--card))',
-                              color: (m.role === 'observer') ? '#f59e0b' : 'hsl(var(--foreground))',
-                              cursor: 'pointer',
-                              outline: 'none',
-                            }}
-                          >
-                            <option value="member">👤 Member (Active)</option>
-                            <option value="observer">👁️ Observer (Intern)</option>
-                          </select>
+                          />
                         ) : (
                           // Read-only badge for regular members & observers
                           <span
                             style={{
                               fontSize: 11,
                               fontWeight: 700,
-                              padding: '3px 8px',
-                              borderRadius: 6,
+                              padding: '4px 9px',
+                              borderRadius: 8,
                               backgroundColor: m.role === 'admin'
                                 ? 'hsl(var(--primary) / 0.15)'
                                 : m.role === 'observer'
@@ -302,9 +295,25 @@ export default function MembersModal({ onClose }: Props) {
                                 : m.role === 'observer'
                                 ? '#f59e0b'
                                 : 'hsl(var(--foreground))',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              boxShadow: 'var(--neu-shadow-raised-sm)',
                             }}
                           >
-                            {m.role === 'admin' ? '⭐ Admin' : m.role === 'observer' ? '👁️ Observer' : '👤 Member'}
+                            {m.role === 'admin' ? (
+                              <>
+                                <Shield size={12} /> Admin
+                              </>
+                            ) : m.role === 'observer' ? (
+                              <>
+                                <Eye size={12} /> Observer
+                              </>
+                            ) : (
+                              <>
+                                <User size={12} /> Member
+                              </>
+                            )}
                           </span>
                         )}
                       </div>
@@ -357,7 +366,7 @@ export default function MembersModal({ onClose }: Props) {
           {/* Add Member Form */}
           <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid hsl(var(--border) / 0.6)', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <label className="field-label" style={{ margin: 0 }}>Add New Team Member</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.1fr', gap: 8, alignItems: 'center' }}>
               <input
                 type="text"
                 className="text-input"
@@ -372,20 +381,43 @@ export default function MembersModal({ onClose }: Props) {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
               />
-              <select
+              <NeumorphicSelect
                 value={role}
-                onChange={e => setRole(e.target.value as 'admin' | 'member' | 'observer')}
-                className="text-input"
-                style={{ cursor: 'pointer', fontSize: 12 }}
-              >
-                {isOwner && <option value="admin">⭐ Admin (Co-Manager)</option>}
-                <option value="member">👤 Member (Active)</option>
-                <option value="observer">👁️ Observer (Intern)</option>
-              </select>
+                options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
+                onChange={setRole}
+                size="md"
+              />
             </div>
 
-            <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
-              💡 <strong>Roles:</strong> <strong>Admin</strong> can assign tasks and manage members. <strong>Member</strong> can complete cards and participate. <strong>Observer</strong> has read-only study access for learning architecture.
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                padding: '10px 12px',
+                borderRadius: 8,
+                backgroundColor: 'hsl(var(--muted) / 0.35)',
+                border: '1px solid hsl(var(--border) / 0.5)',
+                fontSize: 11.5,
+                color: 'hsl(var(--muted-foreground))',
+                lineHeight: 1.45,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Info size={13} style={{ color: 'hsl(var(--primary))' }} />
+                <span>Role Permissions:</span>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <li>
+                  <strong style={{ color: 'hsl(var(--foreground))' }}>Admin:</strong> Assign tasks, manage members, and configure boards.
+                </li>
+                <li>
+                  <strong style={{ color: 'hsl(var(--foreground))' }}>Member:</strong> Complete assigned cards, edit details, and post comments.
+                </li>
+                <li>
+                  <strong style={{ color: 'hsl(var(--foreground))' }}>Observer:</strong> Read-only intern mode — study architecture, view task guides, and reply to comments.
+                </li>
+              </ul>
             </div>
 
             <motion.button

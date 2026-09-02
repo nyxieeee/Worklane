@@ -3,7 +3,7 @@ import {
   AlignLeft, Paperclip, MessageSquare, Calendar, Tag, Users,
   Trash2, CheckSquare, Square, Download, X, Send, Plus, Check,
   Eye, Image as ImageIcon, Maximize2, AtSign, Reply, Sparkles,
-  FileSpreadsheet, FileText, FileCode, FileArchive, File
+  FileSpreadsheet, FileText, FileCode, FileArchive, File, Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -1247,8 +1247,8 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                   ) : (
                     <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Unassigned</span>
                   )}
-                  <div style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>
-                    🔒 Only the board owner or admins can assign team members.
+                  <div style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Lock size={11} /> Only the board owner or admins can assign team members.
                   </div>
                 </div>
               )}

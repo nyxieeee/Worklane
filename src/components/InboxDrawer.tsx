@@ -251,11 +251,13 @@ export function InboxDrawer({
                   textAlign: 'center',
                   fontSize: 12,
                   fontWeight: 600,
-                  color: 'hsl(var(--primary))',
-                  background: 'hsl(var(--primary) / 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
                 }}
               >
-                📥 Drop card here to move to Inbox
+                <Inbox size={14} /> Drop card here to move to Inbox
               </div>
             )}
 

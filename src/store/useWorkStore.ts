@@ -123,26 +123,18 @@ function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => C
 }
 
 const syncTimers = new Map<string, number>();
-const activeSyncs = new Set<string>();
-const lastLocalMutationTime = new Map<string, number>();
 
-export function scheduleBoardSync(board: Board, delayMs = 350) {
+export function scheduleBoardSync(board: Board, delayMs = 60) {
   if (!board || !board.id) return;
-  lastLocalMutationTime.set(board.id, Date.now());
 
   const existing = syncTimers.get(board.id);
   if (existing) clearTimeout(existing);
 
   const timer = window.setTimeout(async () => {
-    syncTimers.delete(board.id);
-    activeSyncs.add(board.id);
     try {
       await supabaseService.syncBoard(board);
     } finally {
-      // Keep a 3-second guard after sync finishes to avoid cloud echo race condition
-      setTimeout(() => {
-        activeSyncs.delete(board.id);
-      }, 3000);
+      syncTimers.delete(board.id);
     }
   }, delayMs);
 
@@ -175,19 +167,14 @@ export const useWorkStore = create<WorkState>()(
           }
 
           // Supabase is the single source of truth.
-          // Only preserve in-memory boards that are mid-sync (user just created/edited them)
+          // Only preserve in-memory boards if a local edit is actively debouncing
           set(s => {
-            const now = Date.now();
-
             const finalBoards = cloudBoards.map(cb => {
-              const hasPendingSync = syncTimers.has(cb.id) || activeSyncs.has(cb.id);
-              const lastMutation = lastLocalMutationTime.get(cb.id) || 0;
-              const isRecentMutation = (now - lastMutation) < 3500;
+              const hasPendingSync = syncTimers.has(cb.id);
 
-              if (hasPendingSync || isRecentMutation) {
+              if (hasPendingSync) {
                 const memBoard = s.boards.find(lb => lb.id === cb.id);
                 if (memBoard) {
-                  // Keep in-flight local version, but sync members from cloud
                   return { ...memBoard, members: cb.members };
                 }
               }
@@ -196,11 +183,8 @@ export const useWorkStore = create<WorkState>()(
 
             // Include newly created boards that haven't propagated to cloud yet
             s.boards.forEach(lb => {
-              const hasPendingSync = syncTimers.has(lb.id) || activeSyncs.has(lb.id);
-              const lastMutation = lastLocalMutationTime.get(lb.id) || 0;
-              const isRecentCreate = (now - lastMutation) < 8000;
-
-              if ((hasPendingSync || isRecentCreate) && !finalBoards.some(b => b.id === lb.id)) {
+              const hasPendingSync = syncTimers.has(lb.id);
+              if (hasPendingSync && !finalBoards.some(b => b.id === lb.id)) {
                 finalBoards.push(lb);
               }
             });
@@ -397,7 +381,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       deleteColumn: (colId) => {
@@ -410,7 +394,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       renameColumn: (colId, name) => {
@@ -423,7 +407,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       addCard: (colId, title) => {
@@ -445,7 +429,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
         return card;
       },
 
@@ -464,7 +448,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       deleteCard: (cardId) => {
@@ -489,7 +473,7 @@ export const useWorkStore = create<WorkState>()(
           return { boards: updatedBoards };
         });
         supabaseService.deleteCard(cardId);
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       undoLastMove: () => {
@@ -504,7 +488,7 @@ export const useWorkStore = create<WorkState>()(
             lastMoveSnapshot: null,
           };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       moveCard: (cardId, fromColId, toColId, afterCardId) => {
@@ -562,7 +546,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards, lastMoveSnapshot: snapshot };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       addInboxCard: (title, boardId) => {
@@ -592,7 +576,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === bId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
         return card;
       },
 
@@ -611,7 +595,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       moveInboxCardToColumn: (cardId, toColId, afterCardId) => {
@@ -644,7 +628,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       moveColumnCardToInbox: (cardId, fromColId) => {
@@ -672,7 +656,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       toggleCardComplete: (cardId) => {
@@ -726,7 +710,7 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: resultBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       toggleCardLabel: (cardId, labelId) => {
@@ -750,7 +734,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       toggleCardAssignee: (cardId, memberId) => {
@@ -797,7 +781,7 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: result };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       // ── Attachment actions ────────────────────────────
@@ -818,7 +802,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       removeAttachment: (cardId, attId) => {
@@ -838,7 +822,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       // ── Comment actions ───────────────────────────────
@@ -931,7 +915,7 @@ export const useWorkStore = create<WorkState>()(
 
           return { boards: resultBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       deleteComment: (cardId, commentId) => {
@@ -952,7 +936,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       // ── Member actions ────────────────────────────────
@@ -985,7 +969,7 @@ export const useWorkStore = create<WorkState>()(
         if (newMember) {
           supabaseService.addMember(currentActiveId, newMember);
           const board = get().boards.find(b => b.id === currentActiveId);
-          if (board) scheduleBoardSync(board, 250);
+          if (board) scheduleBoardSync(board, 50);
         }
 
         return newId;
@@ -1002,7 +986,7 @@ export const useWorkStore = create<WorkState>()(
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
       updateMemberRole: (boardId, memberId, role) => {
@@ -1016,7 +1000,7 @@ export const useWorkStore = create<WorkState>()(
           return { boards: updatedBoards };
         });
         if (targetBoard) {
-          scheduleBoardSync(targetBoard, 250);
+          scheduleBoardSync(targetBoard, 50);
           supabaseService.updateMemberRole(boardId, memberId, role);
         }
       },
@@ -1050,7 +1034,7 @@ export const useWorkStore = create<WorkState>()(
           supabaseService.removeMemberFromBoard(activeId, removedEmail, memberId);
         }
         if (targetBoard) {
-          scheduleBoardSync(targetBoard, 250);
+          scheduleBoardSync(targetBoard, 50);
         }
       },
 

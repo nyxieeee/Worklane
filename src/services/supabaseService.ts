@@ -317,150 +317,111 @@ export const supabaseService = {
           .not('id', 'in', `(${currentColIds.join(',')})`);
       }
 
-      // 4. Upsert Cards (both regular column cards and inbox cards)
-      const currentCardIds: string[] = [];
+      // 4. Batch Upsert Cards (both regular column cards and inbox cards)
+      const allCardsWithMeta: Array<{ card: Card; colId: string | null; pos: number; isInbox: boolean }> = [];
+      for (const col of board.columns || []) {
+        (col.cards || []).forEach((c, idx) => {
+          allCardsWithMeta.push({ card: c, colId: col.id, pos: idx, isInbox: false });
+        });
+      }
+      (board.inboxCards || []).forEach((c, idx) => {
+        allCardsWithMeta.push({ card: c, colId: null, pos: idx, isInbox: true });
+      });
 
-      const syncSingleCard = async (card: Card, columnId: string | null, position: number, isInbox: boolean) => {
-        currentCardIds.push(card.id);
+      const currentCardIds = allCardsWithMeta.map(item => item.card.id).filter(Boolean);
 
-        await supabase.from('cards').upsert({
-          id: card.id,
+      if (allCardsWithMeta.length > 0) {
+        const cardRows = allCardsWithMeta.map(item => ({
+          id: item.card.id,
           board_id: board.id,
-          column_id: columnId,
-          title: card.title,
-          description: card.description || '',
-          priority: card.priority || 'medium',
-          completed: !!card.completed,
-          completed_at: card.completedAt || null,
-          due_date: card.dueDate || null,
-          cover_attachment_id: card.coverAttachmentId || null,
-          position,
-          is_inbox: isInbox,
+          column_id: item.colId,
+          title: item.card.title,
+          description: item.card.description || '',
+          priority: item.card.priority || 'medium',
+          completed: !!item.card.completed,
+          completed_at: item.card.completedAt || null,
+          due_date: item.card.dueDate || null,
+          cover_attachment_id: item.card.coverAttachmentId || null,
+          position: item.pos,
+          is_inbox: item.isInbox,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
+        }));
 
-        // Card Assignees
-        const validAssigneeIds = (card.assignees || []).filter(Boolean);
-        if (validAssigneeIds.length > 0) {
-          const assRows = validAssigneeIds.map(mId => ({
-            card_id: card.id,
-            member_id: mId,
-          }));
-          await supabase.from('card_assignees').upsert(assRows, { onConflict: 'card_id,member_id' });
-          await supabase
-            .from('card_assignees')
-            .delete()
-            .eq('card_id', card.id)
-            .not('member_id', 'in', `(${validAssigneeIds.join(',')})`);
-        } else {
-          await supabase.from('card_assignees').delete().eq('card_id', card.id);
-        }
+        await supabase.from('cards').upsert(cardRows, { onConflict: 'id' });
 
-        // Card Labels
-        const validLabelIds = (card.labels || []).filter(Boolean);
-        if (validLabelIds.length > 0) {
-          const lblRows = validLabelIds.map(lId => ({
-            card_id: card.id,
-            label_id: lId,
-          }));
-          await supabase.from('card_labels').upsert(lblRows, { onConflict: 'card_id,label_id' });
-          await supabase
-            .from('card_labels')
-            .delete()
-            .eq('card_id', card.id)
-            .not('label_id', 'in', `(${validLabelIds.join(',')})`);
-        } else {
-          await supabase.from('card_labels').delete().eq('card_id', card.id);
-        }
-
-        // Card Comments & Replies
-        if (card.comments?.length) {
-          // 1. First upsert parent / root comments
-          const rootComments = card.comments
-            .filter(cm => !cm.parentId)
-            .map(cm => ({
-              id: cm.id,
-              card_id: card.id,
-              parent_id: null,
-              reply_to_author: null,
-              author: cm.author,
-              author_initials: cm.authorInitials || 'U',
-              avatar_color: cm.avatarColor || '#6366f1',
-              text: cm.text,
-              created_at: cm.createdAt || new Date().toISOString(),
-            }));
-          if (rootComments.length > 0) {
-            const { error: rErr } = await supabase.from('comments').upsert(rootComments, { onConflict: 'id' });
-            if (rErr) console.warn('[SupabaseService] Root comments upsert warning:', rErr);
+        // Batch Assignees
+        const assigneeRows: any[] = [];
+        allCardsWithMeta.forEach(item => {
+          (item.card.assignees || []).filter(Boolean).forEach(mId => {
+            assigneeRows.push({ card_id: item.card.id, member_id: mId });
+          });
+        });
+        if (currentCardIds.length > 0) {
+          await supabase.from('card_assignees').delete().in('card_id', currentCardIds);
+          if (assigneeRows.length > 0) {
+            await supabase.from('card_assignees').upsert(assigneeRows, { onConflict: 'card_id,member_id' });
           }
+        }
 
-          // 2. Second upsert replies with parent_id
-          const replies = card.comments
-            .filter(cm => cm.parentId)
-            .map(cm => ({
+        // Batch Labels
+        const labelRows: any[] = [];
+        allCardsWithMeta.forEach(item => {
+          (item.card.labels || []).filter(Boolean).forEach(lId => {
+            labelRows.push({ card_id: item.card.id, label_id: lId });
+          });
+        });
+        if (currentCardIds.length > 0) {
+          await supabase.from('card_labels').delete().in('card_id', currentCardIds);
+          if (labelRows.length > 0) {
+            await supabase.from('card_labels').upsert(labelRows, { onConflict: 'card_id,label_id' });
+          }
+        }
+
+        // Batch Comments
+        const allComments: any[] = [];
+        allCardsWithMeta.forEach(item => {
+          (item.card.comments || []).forEach(cm => {
+            allComments.push({
               id: cm.id,
-              card_id: card.id,
-              parent_id: cm.parentId,
+              card_id: item.card.id,
+              parent_id: cm.parentId || null,
               reply_to_author: cm.replyToAuthor || null,
               author: cm.author,
               author_initials: cm.authorInitials || 'U',
               avatar_color: cm.avatarColor || '#6366f1',
               text: cm.text,
               created_at: cm.createdAt || new Date().toISOString(),
-            }));
-          if (replies.length > 0) {
-            const { error: repErr } = await supabase.from('comments').upsert(replies, { onConflict: 'id' });
-            if (repErr) console.warn('[SupabaseService] Replies upsert warning:', repErr);
-          }
-
-          const currentCmIds = card.comments.map(c => c.id).filter(Boolean);
-          if (currentCmIds.length > 0) {
-            await supabase.from('comments').delete().eq('card_id', card.id).not('id', 'in', `(${currentCmIds.join(',')})`);
-          }
-        } else {
-          await supabase.from('comments').delete().eq('card_id', card.id);
+            });
+          });
+        });
+        if (allComments.length > 0) {
+          const parents = allComments.filter(c => !c.parent_id);
+          const replies = allComments.filter(c => c.parent_id);
+          if (parents.length > 0) await supabase.from('comments').upsert(parents, { onConflict: 'id' });
+          if (replies.length > 0) await supabase.from('comments').upsert(replies, { onConflict: 'id' });
         }
 
-        // Card Attachments
-        if (card.attachments?.length) {
-          const attRows = card.attachments.map(att => ({
-            id: att.id,
-            card_id: card.id,
-            name: att.name,
-            size: att.size || 0,
-            type: att.type || 'application/octet-stream',
-            data_url: att.dataUrl || '',
-            added_at: att.addedAt || new Date().toISOString(),
-          }));
-          const { error: attErr } = await supabase.from('attachments').upsert(attRows, { onConflict: 'id' });
-          if (attErr) console.warn('[SupabaseService] Attachments upsert warning:', attErr);
-
-          const currentAttIds = card.attachments.map(a => a.id).filter(Boolean);
-          if (currentAttIds.length > 0) {
-            await supabase.from('attachments').delete().eq('card_id', card.id).not('id', 'in', `(${currentAttIds.join(',')})`);
-          }
-        } else {
-          await supabase.from('attachments').delete().eq('card_id', card.id);
-        }
-      };
-
-      // Sync Column Cards
-      for (const col of board.columns || []) {
-        if (!col.cards?.length) continue;
-        for (let cIdx = 0; cIdx < col.cards.length; cIdx++) {
-          await syncSingleCard(col.cards[cIdx], col.id, cIdx, false);
+        // Batch Attachments
+        const allAtts: any[] = [];
+        allCardsWithMeta.forEach(item => {
+          (item.card.attachments || []).forEach(att => {
+            allAtts.push({
+              id: att.id,
+              card_id: item.card.id,
+              name: att.name,
+              size: att.size || 0,
+              type: att.type || 'application/octet-stream',
+              data_url: att.dataUrl || '',
+              added_at: att.addedAt || new Date().toISOString(),
+            });
+          });
+        });
+        if (allAtts.length > 0) {
+          await supabase.from('attachments').upsert(allAtts, { onConflict: 'id' });
         }
       }
 
-      // Sync Inbox Cards
-      if (board.inboxCards?.length) {
-        for (let iIdx = 0; iIdx < board.inboxCards.length; iIdx++) {
-          await syncSingleCard(board.inboxCards[iIdx], null, iIdx, true);
-        }
-      }
-
-      // Delete orphaned cards (cards that were removed) - only if we actually synced some cards
-      // IMPORTANT: Never wipe all cards by deleting with empty currentCardIds
+      // Delete orphaned cards (cards that were removed from the board)
       if (currentCardIds.length > 0) {
         await supabase
           .from('cards')

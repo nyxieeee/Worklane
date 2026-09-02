@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Inbox, Plus, X, Search, ChevronLeft,
-  MessageSquare, Paperclip, Calendar, Sparkles, Trash2
+  MessageSquare, Paperclip, Calendar, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card as CardType, Board, LABELS } from '../types';
@@ -239,10 +239,8 @@ export function InboxDrawer({
               borderBottom: '1px solid hsl(var(--border) / 0.4)',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
             }}
           >
-            <Sparkles size={12} color="hsl(var(--primary))" />
             <span>Employee concerns & backlog. Drag to board to prioritize.</span>
           </div>
 

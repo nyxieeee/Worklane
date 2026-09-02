@@ -40,29 +40,37 @@ export const supabaseService = {
       const cleanEmail = email.toLowerCase().trim();
 
       // 1. Find all board IDs where user is enrolled as a collaborator
-      const { data: memberRows } = await supabase
+      const { data: memberRows, error: memberErr } = await supabase
         .from('board_members')
         .select('board_id')
         .ilike('email', cleanEmail);
 
+      if (memberErr) {
+        console.warn('[SupabaseService] Error finding member boards:', memberErr);
+      }
+
       const memberBoardIds = (memberRows || []).map(r => r.board_id).filter(Boolean);
 
-      // 2. Query only boards created by this user OR where user is a confirmed member
-      let boardsQuery = supabase.from('boards').select('*');
+      // 2. Fetch created boards and member boards reliably in parallel
+      const boardQueries = [
+        supabase.from('boards').select('*').ilike('created_by', cleanEmail),
+      ];
       if (memberBoardIds.length > 0) {
-        boardsQuery = boardsQuery.or(`created_by.ilike.${cleanEmail},id.in.(${memberBoardIds.map(id => `"${id}"`).join(',')})`);
-      } else {
-        boardsQuery = boardsQuery.ilike('created_by', cleanEmail);
+        boardQueries.push(
+          supabase.from('boards').select('*').in('id', memberBoardIds)
+        );
       }
 
-      const { data: boardsData, error: boardsErr } = await boardsQuery.order('created_at', { ascending: true });
-
-      if (boardsErr) {
-        console.warn('[SupabaseService] getBoards error:', boardsErr);
-        return [];
+      const boardResults = await Promise.all(boardQueries);
+      const boardsMap = new Map<string, any>();
+      for (const res of boardResults) {
+        if (res.data) {
+          res.data.forEach(b => boardsMap.set(b.id, b));
+        }
       }
 
-      if (!boardsData || boardsData.length === 0) return [];
+      const boardsData = Array.from(boardsMap.values());
+      if (boardsData.length === 0) return [];
 
       const boardIds = boardsData.map(b => b.id);
 

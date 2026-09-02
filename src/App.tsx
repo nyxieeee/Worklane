@@ -108,8 +108,21 @@ export default function App() {
   // Load cloud boards & notifications when user is logged in
   useEffect(() => {
     if (currentUser?.email) {
-      loadBoardsFromCloud(currentUser.email);
-      loadNotificationsFromCloud(currentUser.email);
+      const email = currentUser.email.toLowerCase().trim();
+      loadBoardsFromCloud(email);
+      loadNotificationsFromCloud(email);
+
+      // Auto-sync any existing local boards created by this user to Supabase
+      const localBoards = useWorkStore.getState().boards;
+      localBoards.forEach(b => {
+        if (!b.createdBy || b.createdBy.toLowerCase().trim() === email) {
+          const updatedBoard = {
+            ...b,
+            createdBy: email,
+          };
+          supabaseService.syncBoard(updatedBoard);
+        }
+      });
     }
   }, [currentUser?.email, loadBoardsFromCloud, loadNotificationsFromCloud]);
 

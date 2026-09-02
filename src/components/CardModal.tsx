@@ -4,7 +4,7 @@ import {
   Trash2, CheckSquare, Square, Download, X, Send, Plus, Check,
   Eye, Image as ImageIcon, Maximize2, AtSign, Reply, Sparkles,
   FileSpreadsheet, FileText, FileCode, FileArchive, File, Lock,
-  Edit3, Crown, Shield
+  Edit3, Crown, Shield, Save, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -14,6 +14,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { LABELS, type Attachment, type Comment } from '../types';
 import { avatarInitials, formatBytes, formatTime, uid, truncateFileName, sortMembersWithOwnerFirst } from '../utils';
+import { supabaseService } from '../services/supabaseService';
 import NeumorphicDatePicker from './ui/NeumorphicDatePicker';
 
 interface Props {
@@ -116,19 +117,93 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const isAdmin = !isOwner && currentMemberObj?.role === 'admin';
   const canAssign = isOwner || isAdmin || !board.createdBy;
 
-  // ── Local title state ──
+  // ── Local title & description state with unsaved change tracking ──
   const [localTitle, setLocalTitle] = useState(card.title);
-  useEffect(() => { setLocalTitle(card.title); }, [card.title]);
+  const [localDescription, setLocalDescription] = useState(card.description || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavedSuccess, setIsSavedSuccess] = useState(false);
+  const [shakeSave, setShakeSave] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleTitleBlur = () => {
-    const trimmed = localTitle.trim();
-    if (trimmed && trimmed !== card.title) updateCard(cardId, { title: trimmed });
-    else if (!trimmed) setLocalTitle(card.title);
-  };
+  useEffect(() => {
+    setLocalTitle(card.title);
+    setLocalDescription(card.description || '');
+  }, [card.title, card.description]);
+
+  const isDirty = useMemo(() => {
+    const titleChanged = localTitle.trim() !== card.title;
+    const descChanged = localDescription !== (card.description || '');
+    return titleChanged || descChanged;
+  }, [localTitle, localDescription, card.title, card.description]);
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    updateCard(cardId, { description: e.target.value });
+    setLocalDescription(e.target.value);
   };
+
+  const handleSaveCard = async () => {
+    const trimmedTitle = localTitle.trim();
+    if (!trimmedTitle) {
+      showToast('Card title cannot be empty', 'error');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      updateCard(cardId, {
+        title: trimmedTitle,
+        description: localDescription,
+      });
+
+      const updatedBoard = {
+        ...board,
+        columns: (board.columns || []).map(col => ({
+          ...col,
+          cards: (col.cards || []).map(c => c.id === cardId ? { ...c, title: trimmedTitle, description: localDescription } : c),
+        })),
+        inboxCards: (board.inboxCards || []).map(c => c.id === cardId ? { ...c, title: trimmedTitle, description: localDescription } : c),
+      };
+
+      await supabaseService.syncBoard(updatedBoard);
+
+      setIsSaving(false);
+      setIsSavedSuccess(true);
+      showToast('Card changes saved to cloud!', 'success');
+      setTimeout(() => setIsSavedSuccess(false), 2000);
+    } catch (err) {
+      console.warn('Error saving card:', err);
+      setIsSaving(false);
+      showToast('Failed to save card to cloud', 'error');
+    }
+  };
+
+  const handleSafeClose = () => {
+    if (isDirty) {
+      setShakeSave(true);
+      setTimeout(() => setShakeSave(false), 700);
+      showToast('Please save your card changes before closing!', 'warning');
+      return;
+    }
+    onClose();
+  };
+
+  // Prevent Escape key from closing when dirty
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !previewAttachment && !showMentionMenu) {
+        if (isDirty) {
+          e.preventDefault();
+          e.stopPropagation();
+          setShakeSave(true);
+          setTimeout(() => setShakeSave(false), 700);
+          showToast('Please save your card changes before closing!', 'warning');
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isDirty, previewAttachment, showMentionMenu, onClose]);
 
   const handleDeleteCard = () => {
     showConfirm({
@@ -137,10 +212,13 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
       confirmText: 'Delete Task',
       variant: 'danger',
       icon: 'trash',
-      onConfirm: () => {
-        deleteCard(cardId);
-        showToast('Task deleted', 'info');
-        onClose();
+      onConfirm: async () => {
+        setIsDeleting(true);
+        setTimeout(() => {
+          deleteCard(cardId);
+          showToast('Task deleted', 'info');
+          onClose();
+        }, 260);
       }
     });
   };
@@ -345,10 +423,14 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
 
   return (
     <>
-    <div className="modal-overlay" style={{ perspective: 1200 }} onClick={onClose}>
+    <div className="modal-overlay" style={{ perspective: 1200 }} onClick={handleSafeClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.94, rotateX: 12, translateZ: -60 }}
-        animate={{ opacity: 1, scale: 1, rotateX: 0, translateZ: 0 }}
+        animate={
+          isDeleting
+            ? { opacity: 0, scale: 0.72, filter: 'blur(10px)', rotateX: 20, y: 30 }
+            : { opacity: 1, scale: 1, rotateX: 0, translateZ: 0 }
+        }
         exit={{ opacity: 0, scale: 0.94, rotateX: 12, translateZ: -60 }}
         transition={{ duration: 0.22, ease: 'easeOut' }}
         className="modal large-modal"
@@ -395,7 +477,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                 width: 28,
                 height: 28
               }}
-              onClick={onClose}
+              onClick={handleSafeClose}
             >
               <X size={15} />
             </motion.button>
@@ -452,7 +534,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
             </span>
           </div>
           {!coverAttachment && (
-            <motion.button whileTap={{ scale: 0.92 }} className="icon-btn" onClick={onClose}>
+            <motion.button whileTap={{ scale: 0.92 }} className="icon-btn" onClick={handleSafeClose}>
               <X size={15} />
             </motion.button>
           )}
@@ -488,7 +570,6 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                 value={localTitle}
                 rows={1}
                 onChange={e => setLocalTitle(e.target.value)}
-                onBlur={handleTitleBlur}
                 placeholder="Enter card title..."
               />
             </div>
@@ -501,7 +582,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
               <textarea
                 className="textarea-input"
                 rows={4}
-                value={card.description || ''}
+                value={localDescription}
                 onChange={handleDescriptionChange}
                 placeholder="Add a detailed description..."
               />
@@ -1392,12 +1473,57 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
               )}
             </div>
 
-            {/* Delete Card */}
-            <div style={{ marginTop: 'auto', paddingTop: 14 }}>
+            {/* Save Card & Delete Card Action Area */}
+            <div style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                animate={{
+                  x: shakeSave ? [-8, 8, -6, 6, -3, 3, 0] : 0,
+                  boxShadow: isDirty
+                    ? '0 0 16px hsla(var(--primary), 0.45), var(--neu-shadow-raised-sm)'
+                    : 'var(--neu-shadow-raised-sm)'
+                }}
+                transition={{ duration: shakeSave ? 0.6 : 0.2 }}
+                className="btn btn-primary"
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  padding: '10px 14px',
+                  borderRadius: 11,
+                  backgroundColor: isSavedSuccess ? '#10b981' : isDirty ? 'hsl(var(--primary))' : 'hsl(var(--card))',
+                  color: isSavedSuccess ? '#fff' : isDirty ? '#fff' : 'hsl(var(--foreground))',
+                  border: isDirty ? 'none' : '1px solid hsl(var(--border))',
+                  cursor: isSaving ? 'wait' : 'pointer',
+                  transition: 'background-color 0.2s, color 0.2s, border 0.2s'
+                }}
+                disabled={isSaving}
+                onClick={handleSaveCard}
+                title={isDirty ? 'Save unsaved card changes' : 'Card is already saved'}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" /> Saving to Cloud...
+                  </>
+                ) : isSavedSuccess ? (
+                  <>
+                    <Check size={15} /> Saved to Cloud!
+                  </>
+                ) : (
+                  <>
+                    <Save size={15} /> {isDirty ? 'Save Card (Unsaved)' : 'Save Card'}
+                  </>
+                )}
+              </motion.button>
+
               <motion.button
                 whileTap={{ scale: 0.97 }}
                 className="btn btn-secondary"
-                style={{ width: '100%', color: 'hsl(var(--destructive))' }}
+                style={{ width: '100%', color: 'hsl(var(--destructive))', borderRadius: 11 }}
                 onClick={handleDeleteCard}
               >
                 <Trash2 size={13} /> Delete Card

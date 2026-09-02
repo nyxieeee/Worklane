@@ -18,6 +18,7 @@ import SettingsModal from './components/modals/SettingsModal';
 import ConfirmModal from './components/modals/ConfirmModal';
 import { InboxDrawer } from './components/InboxDrawer';
 import InviteLandingPage from './components/InviteLandingPage';
+import AppLoadingScreen from './components/AppLoadingScreen';
 import { useWorkStore } from './store/useWorkStore';
 import { useNotifStore } from './store/useNotifStore';
 import { useEmailStore } from './store/useEmailStore';
@@ -45,15 +46,19 @@ export default function App() {
   const updateCard = useWorkStore(s => s.updateCard);
   const syncCurrentUserProfile = useWorkStore(s => s.syncCurrentUserProfile);
   const loadBoardsFromCloud = useWorkStore(s => s.loadBoardsFromCloud);
+  const isLoadingCloud = useWorkStore(s => s.isLoadingCloud);
   const loadNotificationsFromCloud = useNotifStore(s => s.loadNotificationsFromCloud);
   const addNotification = useNotifStore(s => s.addNotification);
   const showToast = useToastStore(s => s.showToast);
   const isDark = useThemeStore(s => s.isDark);
   const currentUser = useAuthStore(s => s.user);
 
+  // Track whether auth has been resolved (prevents login-page flash on reload)
+  const [authInitialized, setAuthInitialized] = useState(false);
+
   // Initialize Supabase Auth session & listener on mount
   useEffect(() => {
-    initializeAuth();
+    initializeAuth().finally(() => setAuthInitialized(true));
   }, [initializeAuth]);
 
   // Pending invite link state
@@ -491,6 +496,18 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
             setPage('dashboard');
           }}
         />
+        <Toast />
+      </div>
+    );
+  }
+
+  // ── Global Loading Screen (auth init + cloud fetch) ──
+  // Shown while: (1) Supabase session hasn't resolved yet, OR
+  //              (2) user is authenticated but boards are still loading from cloud
+  if (!authInitialized || (isAuthenticated && isLoadingCloud)) {
+    return (
+      <div className="app-layout">
+        <AppLoadingScreen isDark={isDark} />
         <Toast />
       </div>
     );

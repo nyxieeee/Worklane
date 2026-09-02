@@ -22,8 +22,10 @@ import { useNotifStore } from './store/useNotifStore';
 import { useEmailStore } from './store/useEmailStore';
 import { useAuthStore } from './store/useAuthStore';
 import { useThemeStore } from './store/useThemeStore';
+import { useToastStore } from './store/useToastStore';
 import { supabaseService } from './services/supabaseService';
-import { formatDueDate } from './utils';
+import { formatDueDate, uid } from './utils';
+import type { MemberRole } from './types';
 
 const CHECK_INTERVAL_MS = 10_000;
 
@@ -43,6 +45,7 @@ export default function App() {
   const loadBoardsFromCloud = useWorkStore(s => s.loadBoardsFromCloud);
   const loadNotificationsFromCloud = useNotifStore(s => s.loadNotificationsFromCloud);
   const addNotification = useNotifStore(s => s.addNotification);
+  const showToast = useToastStore(s => s.showToast);
   const isDark = useThemeStore(s => s.isDark);
   const currentUser = useAuthStore(s => s.user);
 
@@ -50,6 +53,37 @@ export default function App() {
   useEffect(() => {
     initializeAuth();
   }, [initializeAuth]);
+
+  // Handle board invite link (?joinBoard=... or ?invite=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinBoardId = params.get('joinBoard') || params.get('invite');
+    const inviteRole = (params.get('role') as MemberRole) || 'member';
+
+    if (joinBoardId && currentUser?.email) {
+      const cleanEmail = currentUser.email.toLowerCase().trim();
+      const userName = currentUser.name || cleanEmail.split('@')[0];
+      const avatarUrl = currentUser.avatarUrl;
+
+      supabaseService.addMember(joinBoardId, {
+        id: uid(),
+        name: userName,
+        email: cleanEmail,
+        color: '#6366f1',
+        avatarUrl,
+        role: inviteRole,
+      }).then(() => {
+        loadBoardsFromCloud(cleanEmail).then(() => {
+          switchBoard(joinBoardId);
+          setPage('board');
+          showToast(`Welcome! You joined the board as ${inviteRole === 'admin' ? 'an Admin' : inviteRole === 'observer' ? 'an Observer' : 'a Member'}.`, 'success');
+        });
+      });
+
+      // Clean up URL parameter cleanly without reloading
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [currentUser?.email, switchBoard, loadBoardsFromCloud, showToast]);
 
   // Load cloud boards & notifications when user is logged in
   useEffect(() => {
@@ -296,6 +330,7 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
           activeView={viewMode}
           onSelectView={setViewMode}
           onOpenInbox={() => setShowInbox(s => !s)}
+          isInboxOpen={showInbox}
           filterMemberId={filterMemberId}
           onFilterMember={setFilterMemberId}
           onManageMembers={() => setShowMembers(true)}

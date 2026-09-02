@@ -421,6 +421,7 @@ export const supabaseService = {
         email: cleanEmail,
         color: member.color,
         avatar_url: finalAvatar,
+        role: member.role || 'member',
       }, { onConflict: 'board_id,email' });
 
       if (error) {
@@ -431,6 +432,65 @@ export const supabaseService = {
     } catch (err) {
       console.error('[SupabaseService] Exception adding member directly:', err);
       return false;
+    }
+  },
+
+  /**
+   * Search registered Supabase profiles by name or email
+   */
+  async searchRegisteredProfiles(query: string): Promise<Array<{ id: string; name: string; email: string; avatarUrl?: string }>> {
+    if (!isSupabaseConfigured() || !query.trim()) return [];
+    try {
+      const q = `%${query.trim().toLowerCase()}%`;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, email, avatar_url')
+        .or(`name.ilike.${q},email.ilike.${q}`)
+        .limit(10);
+
+      if (error) {
+        console.warn('[SupabaseService] Search profiles error:', error);
+        return [];
+      }
+
+      return (data || []).map(p => ({
+        id: p.id,
+        name: p.name || p.email.split('@')[0],
+        email: p.email,
+        avatarUrl: p.avatar_url || undefined,
+      }));
+    } catch (err) {
+      console.warn('[SupabaseService] Exception searching profiles:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Fetch all registered profiles (useful for initial picker)
+   */
+  async getAllRegisteredProfiles(): Promise<Array<{ id: string; name: string; email: string; avatarUrl?: string }>> {
+    if (!isSupabaseConfigured()) return [];
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, email, avatar_url')
+        .order('name', { ascending: true })
+        .limit(50);
+
+      if (error) {
+        console.warn('[SupabaseService] Get all profiles error:', error);
+        return [];
+      }
+
+      return (data || []).map(p => ({
+        id: p.id,
+        name: p.name || p.email.split('@')[0],
+        email: p.email,
+        avatarUrl: p.avatar_url || undefined,
+      }));
+    } catch (err) {
+      console.warn('[SupabaseService] Exception getting profiles:', err);
+      return [];
     }
   },
 

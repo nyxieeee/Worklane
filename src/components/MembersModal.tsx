@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
-import { X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye, Crown, Info, Lock } from 'lucide-react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye,
+  Crown, Info, Lock, Search, Link2, Copy, Check, Sparkles,
+  UserCheck, Loader2, Mail
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useToastStore } from '../store/useToastStore';
 import { useConfirmStore } from '../store/useConfirmStore';
@@ -10,12 +14,20 @@ import { useEmailStore } from '../store/useEmailStore';
 import { avatarInitials, uid } from '../utils';
 import { NeumorphicSelect, SelectOption } from './ui/NeumorphicSelect';
 import { MemberRole } from '../types';
+import { supabaseService } from '../services/supabaseService';
 
 interface Props {
   onClose: () => void;
 }
 
 type AssignableRole = 'admin' | 'member' | 'observer';
+
+interface RegisteredUser {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+}
 
 const OWNER_ROLE_OPTIONS: SelectOption<AssignableRole>[] = [
   { value: 'admin', label: 'Admin', subLabel: 'Full board management', icon: <Shield size={13} />, color: 'hsl(var(--primary))' },
@@ -38,10 +50,19 @@ export default function MembersModal({ onClose }: Props) {
   const showConfirm = useConfirmStore(s => s.showConfirm);
   const currentUser = useAuthStore(s => s.user);
 
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'member' | 'observer'>('member');
-  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
+  // Search & Registered users state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<RegisteredUser[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<RegisteredUser | null>(null);
+  const [role, setRole] = useState<AssignableRole>('member');
+
+  // Invite link state
+  const [inviteRole, setInviteRole] = useState<AssignableRole>('member');
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [showInviteTab, setShowInviteTab] = useState(false);
+
+  const searchTimeoutRef = useRef<number | undefined>(undefined);
 
   const updateMemberRole = useWorkStore(s => s.updateMemberRole);
 
@@ -53,6 +74,34 @@ export default function MembersModal({ onClose }: Props) {
   const currentMemberObj = members.find(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
   const isAdmin = !isOwner && currentMemberObj?.role === 'admin';
   const canManage = isOwner || isAdmin || !board.createdBy;
+
+  // Search Supabase registered users with debounce
+  useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    searchTimeoutRef.current = window.setTimeout(async () => {
+      try {
+        const results = await supabaseService.searchRegisteredProfiles(trimmed);
+        setSearchResults(results);
+      } catch (err) {
+        console.warn('Search error:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 280);
+
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [searchQuery]);
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>, memberId?: string) => {
     const file = e.target.files?.[0];
@@ -68,49 +117,58 @@ export default function MembersModal({ onClose }: Props) {
       if (memberId) {
         updateMember(memberId, { avatarUrl: dataUrl });
         showToast('Profile photo updated', 'success');
-      } else {
-        setAvatarUrl(dataUrl);
       }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
-  const handleAdd = () => {
-    if (!canManage || !name.trim()) return;
-    const trimmedEmail = email.trim();
-    const result = addMember(name.trim(), trimmedEmail, avatarUrl, role);
-    if (result === null && trimmedEmail) {
-      showToast('Member with that email is already on this board', 'error');
-    } else {
-      const adderName = currentUser?.name || currentUser?.email || 'A team member';
-      
-      // In-app notification for the newly added member
-      if (trimmedEmail) {
-        useNotifStore.getState().addNotification(
-          `Invited to board: ${board.name}`,
-          `${adderName} added you as ${role === 'observer' ? 'an Observer' : 'a Member'} on "${board.name}".`,
-          'users',
-          null,
-          board.id,
-          trimmedEmail
-        );
-
-        // Dispatched email notification log
-        useEmailStore.getState().sendEmailNotification({
-          recipient: { id: result || uid(), name: name.trim(), email: trimmedEmail, color: '#6366f1' },
-          subject: `You've been added to board "${board.name}" on Worklane`,
-          body: `Hi ${name.trim()},\n\n${adderName} added you as ${role === 'observer' ? 'an Observer (study mode)' : 'a Member'} to collaborate on board "${board.name}".\n\nWorklane Team`,
-          eventType: 'member_added',
-        });
-      }
-
-      showToast(`Added ${name.trim()} (${role === 'observer' ? 'Observer' : 'Member'}) to "${board.name}"`, 'success');
-      setName('');
-      setEmail('');
-      setRole('member');
-      setAvatarUrl(undefined);
+  const handleAddSelected = () => {
+    if (!canManage || !selectedUser) return;
+    const cleanEmail = selectedUser.email.toLowerCase().trim();
+    
+    // Check if already in board
+    if (members.some(m => m.email && m.email.toLowerCase().trim() === cleanEmail)) {
+      showToast('User is already a member of this board', 'error');
+      return;
     }
+
+    const result = addMember(selectedUser.name, cleanEmail, selectedUser.avatarUrl, role);
+    if (result !== null) {
+      const adderName = currentUser?.name || currentUser?.email || 'A board manager';
+      
+      // In-app notification
+      useNotifStore.getState().addNotification(
+        `Invited to board: ${board.name}`,
+        `${adderName} added you as ${role === 'observer' ? 'an Observer' : role === 'admin' ? 'an Admin' : 'a Member'} on "${board.name}".`,
+        'users',
+        null,
+        board.id,
+        cleanEmail
+      );
+
+      // Dispatched email log
+      useEmailStore.getState().sendEmailNotification({
+        recipient: { id: result || uid(), name: selectedUser.name, email: cleanEmail, color: '#6366f1' },
+        subject: `You've been added to board "${board.name}" on Worklane`,
+        body: `Hi ${selectedUser.name},\n\n${adderName} added you as ${role === 'observer' ? 'an Observer (study mode)' : role === 'admin' ? 'an Admin' : 'a Member'} to collaborate on board "${board.name}".\n\nWorklane Team`,
+        eventType: 'member_added',
+      });
+
+      showToast(`Added ${selectedUser.name} (${role === 'observer' ? 'Observer' : role === 'admin' ? 'Admin' : 'Member'}) to "${board.name}"`, 'success');
+      setSelectedUser(null);
+      setSearchQuery('');
+      setSearchResults([]);
+      setRole('member');
+    }
+  };
+
+  const handleCopyInviteLink = (assignedRole: AssignableRole = inviteRole) => {
+    const inviteUrl = `${window.location.origin}/?joinBoard=${board.id}&role=${assignedRole}`;
+    navigator.clipboard.writeText(inviteUrl);
+    setCopiedInvite(true);
+    setTimeout(() => setCopiedInvite(false), 2200);
+    showToast(`Invite link copied! Users who sign in with this link join as ${assignedRole === 'admin' ? 'Admin' : assignedRole === 'observer' ? 'Observer' : 'Member'}.`, 'success');
   };
 
   const handleLeaveBoard = () => {
@@ -129,6 +187,8 @@ export default function MembersModal({ onClose }: Props) {
     });
   };
 
+  const inviteUrl = `${window.location.origin}/?joinBoard=${board.id}&role=${inviteRole}`;
+
   return (
     <div className="modal-overlay" style={{ perspective: 1200 }} onClick={onClose}>
       <motion.div
@@ -137,226 +197,214 @@ export default function MembersModal({ onClose }: Props) {
         exit={{ opacity: 0, scale: 0.94, rotateX: 12, translateZ: -50 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
         className="modal small-modal"
-        style={{ transformStyle: 'preserve-3d', maxWidth: 520 }}
+        style={{ transformStyle: 'preserve-3d', maxWidth: 540 }}
         onClick={e => e.stopPropagation()}
       >
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h2 className="modal-title">Board Team & Roles</h2>
-            <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', backgroundColor: 'hsl(var(--card))', boxShadow: 'var(--neu-shadow-input)', padding: '2px 8px', borderRadius: 9999 }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'hsl(var(--muted-foreground))',
+                backgroundColor: 'hsl(var(--card))',
+                boxShadow: 'var(--neu-shadow-input)',
+                padding: '2px 8px',
+                borderRadius: 9999
+              }}
+            >
               {members.length}
             </span>
           </div>
-          <motion.button whileTap={{ scale: 0.92 }} className="icon-btn" onClick={onClose}><X size={15} /></motion.button>
+          <button className="modal-close-btn" onClick={onClose}>
+            <X size={16} />
+          </button>
         </div>
 
-        <div className="modal-body">
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Current Members List */}
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <label className="field-label" style={{ margin: 0 }}>Current Team & Access Levels</label>
-            </div>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {members.length === 0 ? (
               <div style={{ padding: '16px', textAlign: 'center', color: 'hsl(var(--muted-foreground))', fontSize: 13 }}>
-                No members yet
+                No members found
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {members.map(m => {
-                  const isCurrent = currentEmail && m.email && m.email.toLowerCase().trim() === currentEmail;
-                  const isMemberOwner = board.createdBy && m.email && m.email.toLowerCase().trim() === board.createdBy.toLowerCase().trim();
-                  const memberRole = isMemberOwner ? 'owner' : (m.role || 'member');
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto', paddingRight: 4 }}>
+                {members.map(member => {
+                  const isCurrent = !!(member.email && currentEmail && member.email.toLowerCase().trim() === currentEmail);
+                  const isMemberOwner = !!(board.createdBy && member.email && board.createdBy.toLowerCase().trim() === member.email.toLowerCase().trim());
+                  const memberRole: MemberRole = isMemberOwner ? 'owner' : (member.role || 'member');
 
                   return (
-                    <div
-                      key={m.id}
+                    <motion.div
+                      key={member.id}
+                      layout
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 12,
-                        padding: '10px 12px',
-                        borderRadius: 'var(--radius)',
+                        justifyContent: 'space-between',
+                        padding: '9px 12px',
+                        borderRadius: 12,
                         backgroundColor: 'hsl(var(--card))',
                         boxShadow: 'var(--neu-shadow-raised-sm)',
+                        gap: 10
                       }}
                     >
                       {/* Avatar */}
-                      {m.avatarUrl ? (
-                        <img
-                          src={m.avatarUrl}
-                          alt={m.name}
-                          style={{
-                            width: 34,
-                            height: 34,
-                            borderRadius: '50%',
-                            objectFit: 'cover',
-                            flexShrink: 0,
-                            boxShadow: 'var(--neu-shadow-raised-sm)'
-                          }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            width: 34,
-                            height: 34,
-                            borderRadius: '50%',
-                            backgroundColor: m.color || '#6366f1',
-                            color: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            flexShrink: 0,
-                            boxShadow: 'var(--neu-shadow-raised-sm)'
-                          }}
-                        >
-                          {avatarInitials(m.name)}
-                        </div>
-                      )}
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {member.avatarUrl ? (
+                          <img
+                            src={member.avatarUrl}
+                            alt={member.name}
+                            style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid hsl(var(--border))' }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: '50%',
+                              backgroundColor: member.color || 'hsl(var(--primary))',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 12,
+                              fontWeight: 700
+                            }}
+                          >
+                            {avatarInitials(member.name)}
+                          </div>
+                        )}
+                        {isCurrent && (
+                          <label
+                            title="Change photo"
+                            style={{
+                              position: 'absolute',
+                              bottom: -2,
+                              right: -2,
+                              width: 14,
+                              height: 14,
+                              borderRadius: '50%',
+                              backgroundColor: 'hsl(var(--primary))',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Camera size={8} />
+                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleAvatarUpload(e, member.id)} />
+                          </label>
+                        )}
+                      </div>
 
-                      {/* Info */}
+                      {/* Name & Email */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>
-                            {m.name}
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {member.name}
                           </span>
                           {isCurrent && (
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
+                            <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
                               You
                             </span>
                           )}
                         </div>
-                        {m.email && (
-                          <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {m.email}
+                        {member.email && (
+                          <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {member.email}
                           </div>
                         )}
                       </div>
 
-                      {/* Role Selector / Badge */}
-                      <div>
+                      {/* Role Badge / Role Selector */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                         {isMemberOwner ? (
-                          <span
+                          <div
                             style={{
-                              fontSize: 11,
-                              fontWeight: 700,
-                              padding: '4px 9px',
-                              borderRadius: 8,
-                              backgroundColor: 'hsl(var(--primary) / 0.15)',
-                              color: 'hsl(var(--primary))',
-                              display: 'inline-flex',
+                              display: 'flex',
                               alignItems: 'center',
-                              gap: 5,
+                              gap: 4,
+                              padding: '4px 10px',
+                              borderRadius: 9999,
+                              backgroundColor: 'hsl(var(--primary) / 0.12)',
+                              color: 'hsl(var(--primary))',
+                              fontSize: 11.5,
+                              fontWeight: 700,
                               boxShadow: 'var(--neu-shadow-raised-sm)',
                             }}
                           >
-                            <Crown size={12} strokeWidth={2.5} /> Owner
-                          </span>
-                        ) : isOwner ? (
-                          // Owner can assign Admin, Member, or Observer
+                            <Crown size={12} />
+                            <span>Owner</span>
+                          </div>
+                        ) : canManage ? (
                           <NeumorphicSelect
-                            value={m.role || 'member'}
-                            options={OWNER_ROLE_OPTIONS}
-                            size="sm"
+                            value={memberRole as AssignableRole}
+                            options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
                             onChange={(newRole) => {
-                              updateMemberRole(board.id, m.id, newRole);
-                              const roleLabel = newRole === 'admin' ? 'Admin' : newRole === 'observer' ? 'Observer (Intern)' : 'Member';
-                              showToast(`${m.name}'s role updated to ${roleLabel}`, 'success');
+                              updateMemberRole(board.id, member.id, newRole);
+                              showToast(`Updated ${member.name}'s role to ${newRole}`, 'success');
                             }}
-                          />
-                        ) : isAdmin ? (
-                          // Admin can change roles between Member and Observer
-                          <NeumorphicSelect
-                            value={m.role === 'observer' ? 'observer' : 'member'}
-                            options={ADMIN_ROLE_OPTIONS}
                             size="sm"
-                            onChange={(newRole) => {
-                              updateMemberRole(board.id, m.id, newRole);
-                              showToast(`${m.name}'s role updated to ${newRole === 'observer' ? 'Observer (Intern)' : 'Member'}`, 'success');
-                            }}
                           />
                         ) : (
-                          // Read-only badge for regular members & observers
-                          <span
+                          <div
                             style={{
+                              padding: '3px 8px',
+                              borderRadius: 9999,
+                              backgroundColor: 'hsl(var(--card))',
+                              boxShadow: 'var(--neu-shadow-input)',
                               fontSize: 11,
-                              fontWeight: 700,
-                              padding: '4px 9px',
-                              borderRadius: 8,
-                              backgroundColor: m.role === 'admin'
-                                ? 'hsl(var(--primary) / 0.15)'
-                                : m.role === 'observer'
-                                ? 'hsl(38 92% 50% / 0.15)'
-                                : 'hsl(var(--muted))',
-                              color: m.role === 'admin'
-                                ? 'hsl(var(--primary))'
-                                : m.role === 'observer'
-                                ? '#f59e0b'
-                                : 'hsl(var(--foreground))',
-                              display: 'inline-flex',
+                              fontWeight: 600,
+                              color: memberRole === 'admin' ? 'hsl(var(--primary))' : memberRole === 'observer' ? '#f59e0b' : 'hsl(var(--foreground))',
+                              display: 'flex',
                               alignItems: 'center',
-                              gap: 5,
-                              boxShadow: 'var(--neu-shadow-raised-sm)',
+                              gap: 4,
                             }}
                           >
-                            {m.role === 'admin' ? (
-                              <>
-                                <Shield size={12} /> Admin
-                              </>
-                            ) : m.role === 'observer' ? (
-                              <>
-                                <Eye size={12} /> Observer
-                              </>
-                            ) : (
-                              <>
-                                <User size={12} /> Member
-                              </>
-                            )}
-                          </span>
+                            {memberRole === 'admin' ? <Shield size={11} /> : memberRole === 'observer' ? <Eye size={11} /> : <User size={11} />}
+                            <span style={{ textTransform: 'capitalize' }}>{memberRole}</span>
+                          </div>
                         )}
-                      </div>
 
-                      {/* Actions */}
-                      {isCurrent ? (
-                        !isMemberOwner ? (
+                        {/* Delete Member Button */}
+                        {canManage && !isMemberOwner && (
                           <motion.button
                             whileTap={{ scale: 0.9 }}
-                            className="icon-btn"
-                            style={{ color: 'hsl(var(--destructive))' }}
-                            title="Leave Board"
-                            onClick={handleLeaveBoard}
-                          >
-                            <LogOut size={14} />
-                          </motion.button>
-                        ) : null
-                      ) : (
-                        canManage && (
-                          <motion.button
-                            whileTap={{ scale: 0.9 }}
-                            className="icon-btn"
-                            style={{ color: 'hsl(var(--destructive))' }}
-                            title="Remove Member"
                             onClick={() => {
                               showConfirm({
-                                title: `Remove "${m.name}"?`,
-                                message: `Are you sure you want to remove ${m.name} from this board? They will lose access to all tasks.`,
+                                title: `Remove ${member.name}?`,
+                                message: `Are you sure you want to remove ${member.name} from this board?`,
                                 confirmText: 'Remove Member',
                                 variant: 'danger',
                                 icon: 'trash',
                                 onConfirm: () => {
-                                  removeMember(m.id);
-                                  showToast(`${m.name} removed`, 'info');
+                                  removeMember(member.id);
+                                  showToast(`Removed ${member.name}`, 'info');
                                 }
                               });
                             }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: 'hsl(var(--destructive))',
+                              padding: 4,
+                              borderRadius: 6,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                            title="Remove from board"
                           >
                             <Trash2 size={14} />
                           </motion.button>
-                        )
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    </motion.div>
                   );
                 })}
               </div>
@@ -365,31 +413,366 @@ export default function MembersModal({ onClose }: Props) {
 
           {/* Add Member Form (Owner & Admin Only) */}
           {canManage ? (
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid hsl(var(--border) / 0.6)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <label className="field-label" style={{ margin: 0 }}>Add New Team Member</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.1fr', gap: 8, alignItems: 'center' }}>
-                <input
-                  type="text"
-                  className="text-input"
-                  placeholder="Full Name"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                />
-                <input
-                  type="email"
-                  className="text-input"
-                  placeholder="Email Address"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                />
-                <NeumorphicSelect
-                  value={role}
-                  options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
-                  onChange={setRole}
-                  size="md"
-                />
+            <div style={{ marginTop: 6, paddingTop: 14, borderTop: '1px solid hsl(var(--border) / 0.6)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label className="field-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <UserCheck size={14} style={{ color: 'hsl(var(--primary))' }} />
+                  <span>Add Registered Member</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowInviteTab(v => !v)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    color: 'hsl(var(--primary))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <Link2 size={13} />
+                  <span>{showInviteTab ? 'Hide Invite Link' : 'Invite via Link'}</span>
+                </button>
               </div>
 
+              {/* Verified User Search Input */}
+              {!selectedUser && (
+                <div style={{ position: 'relative' }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Search
+                      size={14}
+                      style={{
+                        position: 'absolute',
+                        left: 12,
+                        color: 'hsl(var(--muted-foreground))',
+                        pointerEvents: 'none'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      className="text-input"
+                      placeholder="Search registered user by name or email..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      style={{ paddingLeft: 34, paddingRight: isSearching ? 34 : searchQuery ? 30 : 12 }}
+                    />
+                    {isSearching ? (
+                      <Loader2
+                        size={14}
+                        className="animate-spin"
+                        style={{
+                          position: 'absolute',
+                          right: 12,
+                          color: 'hsl(var(--primary))',
+                        }}
+                      />
+                    ) : searchQuery ? (
+                      <button
+                        type="button"
+                        onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                        style={{
+                          position: 'absolute',
+                          right: 10,
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'hsl(var(--muted-foreground))',
+                          padding: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <X size={13} />
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {/* Search Results Dropdown */}
+                  {searchQuery.trim().length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        backgroundColor: 'hsl(var(--card))',
+                        borderRadius: 10,
+                        boxShadow: 'var(--neu-shadow-raised)',
+                        border: '1px solid hsl(var(--border) / 0.7)',
+                        maxHeight: 190,
+                        overflowY: 'auto',
+                        padding: 6,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                      }}
+                    >
+                      {searchResults.length === 0 && !isSearching ? (
+                        <div style={{ padding: '10px 12px', fontSize: 12, color: 'hsl(var(--muted-foreground))', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'hsl(var(--foreground))', fontWeight: 600 }}>
+                            <Info size={13} color="hsl(var(--primary))" />
+                            <span>No registered user found for "{searchQuery}"</span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.4 }}>
+                            Only users registered on Worklane appear here. You can generate an invite link below so they can sign in and automatically join.
+                          </p>
+                          <motion.button
+                            whileTap={{ scale: 0.96 }}
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => handleCopyInviteLink(role)}
+                            style={{ alignSelf: 'flex-start', fontSize: 11.5, padding: '5px 12px', gap: 6, marginTop: 4 }}
+                          >
+                            <Copy size={12} />
+                            <span>Copy Invite Link (as {role})</span>
+                          </motion.button>
+                        </div>
+                      ) : (
+                        searchResults.map(user => {
+                          const isAlreadyMember = members.some(
+                            m => m.email && m.email.toLowerCase().trim() === user.email.toLowerCase().trim()
+                          );
+
+                          return (
+                            <div
+                              key={user.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '7px 10px',
+                                borderRadius: 8,
+                                backgroundColor: isAlreadyMember ? 'hsl(var(--muted) / 0.25)' : 'hsl(var(--card))',
+                                boxShadow: isAlreadyMember ? 'none' : 'var(--neu-shadow-raised-sm)',
+                                opacity: isAlreadyMember ? 0.6 : 1,
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+                                {user.avatarUrl ? (
+                                  <img
+                                    src={user.avatarUrl}
+                                    alt={user.name}
+                                    style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                                  />
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: 28,
+                                      height: 28,
+                                      borderRadius: '50%',
+                                      backgroundColor: 'hsl(var(--primary))',
+                                      color: '#fff',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {avatarInitials(user.name)}
+                                  </div>
+                                )}
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'hsl(var(--foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {user.name}
+                                  </div>
+                                  <div style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {user.email}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {isAlreadyMember ? (
+                                <span style={{ fontSize: 10.5, fontWeight: 600, color: 'hsl(var(--muted-foreground))', padding: '2px 7px', borderRadius: 6, backgroundColor: 'hsl(var(--muted) / 0.4)' }}>
+                                  In Team
+                                </span>
+                              ) : (
+                                <motion.button
+                                  whileTap={{ scale: 0.94 }}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setSearchQuery('');
+                                    setSearchResults([]);
+                                  }}
+                                  className="btn btn-secondary"
+                                  style={{ padding: '4px 10px', fontSize: 11, fontWeight: 600, color: 'hsl(var(--primary))' }}
+                                >
+                                  Select
+                                </motion.button>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Selected User Confirmation Card */}
+              {selectedUser && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    backgroundColor: 'hsl(var(--card))',
+                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                    border: '1.5px solid hsl(var(--primary) / 0.35)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      {selectedUser.avatarUrl ? (
+                        <img
+                          src={selectedUser.avatarUrl}
+                          alt={selectedUser.name}
+                          style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: '50%',
+                            backgroundColor: 'hsl(var(--primary))',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            fontWeight: 700
+                          }}
+                        >
+                          {avatarInitials(selectedUser.name)}
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span>{selectedUser.name}</span>
+                          <span style={{ fontSize: 9.5, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(142 76% 36% / 0.15)', color: 'hsl(142 76% 36%)', fontWeight: 700 }}>
+                            Registered Account
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>
+                          {selectedUser.email}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUser(null)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'hsl(var(--muted-foreground))',
+                        padding: 4,
+                      }}
+                      title="Choose another user"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 10, alignItems: 'center' }}>
+                    <div>
+                      <label className="field-label" style={{ fontSize: 11, marginBottom: 4 }}>Assign Role</label>
+                      <NeumorphicSelect
+                        value={role}
+                        options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
+                        onChange={setRole}
+                        size="md"
+                      />
+                    </div>
+                    <div style={{ alignSelf: 'flex-end' }}>
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        className="btn btn-primary"
+                        onClick={handleAddSelected}
+                        style={{ width: '100%', height: 38, justifyContent: 'center' }}
+                      >
+                        <UserPlus size={14} /> Add to Team
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Shareable Invite Link Card (Collapsible or toggleable) */}
+              <AnimatePresence>
+                {showInviteTab && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    style={{
+                      overflow: 'hidden',
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      backgroundColor: 'hsl(var(--muted) / 0.3)',
+                      border: '1px dashed hsl(var(--primary) / 0.4)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: 'hsl(var(--foreground))' }}>
+                      <Sparkles size={14} color="hsl(var(--primary))" />
+                      <span>Invite to Worklane & Join Board</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 11.5, color: 'hsl(var(--muted-foreground))', lineHeight: 1.45 }}>
+                      Anyone with this link who registers or signs in with Google will automatically join this board.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                      <NeumorphicSelect
+                        value={inviteRole}
+                        options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
+                        onChange={setInviteRole}
+                        size="sm"
+                      />
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => handleCopyInviteLink(inviteRole)}
+                        style={{ fontSize: 11.5, height: 34, justifyContent: 'center', gap: 6 }}
+                      >
+                        {copiedInvite ? <Check size={13} /> : <Copy size={13} />}
+                        <span>{copiedInvite ? 'Copied Link!' : 'Copy Invite Link'}</span>
+                      </motion.button>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        backgroundColor: 'hsl(var(--card))',
+                        boxShadow: 'var(--neu-shadow-input)',
+                        fontSize: 10.5,
+                        color: 'hsl(var(--muted-foreground))',
+                        fontFamily: 'monospace',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {inviteUrl}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Role Permissions Guide */}
               <div
                 style={{
                   display: 'flex',
@@ -420,20 +803,6 @@ export default function MembersModal({ onClose }: Props) {
                   </li>
                 </ul>
               </div>
-
-              <motion.button
-                whileTap={(name.trim() && email.trim()) ? { scale: 0.95 } : undefined}
-                className="btn btn-primary"
-                onClick={handleAdd}
-                disabled={!name.trim() || !email.trim()}
-                style={{
-                  alignSelf: 'flex-start',
-                  opacity: (name.trim() && email.trim()) ? 1 : 0.5,
-                  cursor: (name.trim() && email.trim()) ? 'pointer' : 'not-allowed',
-                }}
-              >
-                <UserPlus size={14} /> Add to Team
-              </motion.button>
             </div>
           ) : (
             <div

@@ -83,16 +83,32 @@ export function InboxDrawer({
     <AnimatePresence>
       {isOpen && (
         <motion.aside
-          initial={docked ? { width: 0, opacity: 0, scale: 0.96 } : { x: -340, opacity: 0 }}
-          animate={docked ? { width: 320, opacity: 1, scale: 1 } : { x: 0, opacity: 1 }}
-          exit={docked ? { width: 0, opacity: 0, scale: 0.96 } : { x: -340, opacity: 0 }}
-          transition={{ duration: 0.25, ease: [0.25, 1, 0.5, 1] }}
+          initial={
+            docked
+              ? { width: 0, opacity: 0, rotateY: -18, translateZ: -35, scale: 0.94 }
+              : { x: -340, opacity: 0, rotateY: -15 }
+          }
+          animate={
+            docked
+              ? { width: 320, opacity: 1, rotateY: 0, translateZ: 0, scale: 1 }
+              : { x: 0, opacity: 1, rotateY: 0 }
+          }
+          exit={
+            docked
+              ? { width: 0, opacity: 0, rotateY: -18, translateZ: -35, scale: 0.94 }
+              : { x: -340, opacity: 0, rotateY: -15 }
+          }
+          transition={{
+            type: 'spring',
+            damping: 24,
+            stiffness: 220,
+            mass: 0.85,
+          }}
           className={`inbox-drawer-panel ${docked ? 'inbox-docked' : ''}`}
           style={docked ? {
             position: 'relative',
             width: 320,
-            minWidth: 320,
-            maxWidth: 320,
+            minWidth: 0,
             height: '100%',
             flexShrink: 0,
             display: 'flex',
@@ -102,6 +118,9 @@ export function InboxDrawer({
             borderRadius: 14,
             boxShadow: 'var(--neu-shadow-raised)',
             overflow: 'hidden',
+            transformOrigin: 'left center',
+            transformStyle: 'preserve-3d',
+            perspective: 1200,
           } : {
             position: 'absolute',
             top: 16,
@@ -118,15 +137,18 @@ export function InboxDrawer({
             borderRadius: 16,
             boxShadow: '0 20px 40px -15px rgba(0,0,0,0.35), 0 0 0 1px hsl(var(--border) / 0.4)',
             overflow: 'hidden',
+            transformOrigin: 'left center',
+            transformStyle: 'preserve-3d',
           }}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          {/* Header */}
-          <div
-            style={{
-              padding: '14px 16px',
+          <div style={{ width: 320, minWidth: 320, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {/* Header */}
+            <div
+              style={{
+                padding: '14px 16px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -504,8 +526,9 @@ export function InboxDrawer({
               Press <kbd style={{ padding: '1px 4px', borderRadius: 4, background: 'hsl(var(--muted))', border: '1px solid hsl(var(--border))' }}>Enter</kbd> to add
             </div>
           </form>
-        </motion.aside>
-      )}
-    </AnimatePresence>
+        </div>
+      </motion.aside>
+    )}
+  </AnimatePresence>
   );
 }

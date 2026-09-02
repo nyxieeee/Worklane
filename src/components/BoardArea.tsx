@@ -546,9 +546,15 @@ export default function BoardArea({
             {filteredColumns.map((col, idx) => (
               <motion.div
                 key={col.id}
+                layout
                 initial={{ opacity: 0, y: 15, rotateY: -8, translateZ: -20 }}
                 animate={{ opacity: 1, y: 0, rotateY: 0, translateZ: 0 }}
-                transition={{ duration: 0.3, delay: idx * 0.05, ease: [0.25, 1, 0.5, 1] }}
+                transition={{
+                  layout: { type: 'spring', damping: 26, stiffness: 220, mass: 0.8 },
+                  duration: 0.3,
+                  delay: idx * 0.04,
+                  ease: [0.25, 1, 0.5, 1]
+                }}
                 style={{ height: '100%', transformStyle: 'preserve-3d' }}
               >
                 <Column
@@ -568,7 +574,13 @@ export default function BoardArea({
               </motion.div>
             ))}
             {!isObserver && (
-              <motion.button whileTap={{ scale: 0.96 }} className="add-column-btn" onClick={onAddColumn}>
+              <motion.button
+                layout
+                whileTap={{ scale: 0.96 }}
+                className="add-column-btn"
+                onClick={onAddColumn}
+                transition={{ layout: { type: 'spring', damping: 26, stiffness: 220, mass: 0.8 } }}
+              >
                 <Plus size={15} /> Add Column
               </motion.button>
             )}

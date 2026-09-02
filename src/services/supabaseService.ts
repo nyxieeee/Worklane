@@ -466,6 +466,41 @@ export const supabaseService = {
   },
 
   /**
+   * Fetch board metadata for invite acceptance page
+   */
+  async getBoardMetadata(boardId: string): Promise<{ id: string; name: string; color: string; createdBy: string; memberCount: number } | null> {
+    if (!isSupabaseConfigured() || !boardId) return null;
+    try {
+      const { data: boardData, error: boardErr } = await supabase
+        .from('boards')
+        .select('id, name, color, created_by')
+        .eq('id', boardId)
+        .maybeSingle();
+
+      if (boardErr || !boardData) {
+        console.warn('[SupabaseService] Error getting board metadata:', boardErr);
+        return null;
+      }
+
+      const { count } = await supabase
+        .from('board_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('board_id', boardId);
+
+      return {
+        id: boardData.id,
+        name: boardData.name,
+        color: boardData.color,
+        createdBy: boardData.created_by,
+        memberCount: count || 1,
+      };
+    } catch (err) {
+      console.warn('[SupabaseService] Exception getting board metadata:', err);
+      return null;
+    }
+  },
+
+  /**
    * Fetch all registered profiles (useful for initial picker)
    */
   async getAllRegisteredProfiles(): Promise<Array<{ id: string; name: string; email: string; avatarUrl?: string }>> {

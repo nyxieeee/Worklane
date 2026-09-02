@@ -17,6 +17,7 @@ import PrivacyModal from './components/modals/PrivacyModal';
 import SettingsModal from './components/modals/SettingsModal';
 import ConfirmModal from './components/modals/ConfirmModal';
 import { InboxDrawer } from './components/InboxDrawer';
+import InviteLandingPage from './components/InviteLandingPage';
 import { useWorkStore } from './store/useWorkStore';
 import { useNotifStore } from './store/useNotifStore';
 import { useEmailStore } from './store/useEmailStore';
@@ -54,36 +55,33 @@ export default function App() {
     initializeAuth();
   }, [initializeAuth]);
 
-  // Handle board invite link (?joinBoard=... or ?invite=...)
+  // Pending invite link state
+  const [pendingInvite, setPendingInvite] = useState<{ boardId: string; role: MemberRole } | null>(null);
+
+  // Check URL or session for board invite link (?joinBoard=... or ?invite=...)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const joinBoardId = params.get('joinBoard') || params.get('invite');
     const inviteRole = (params.get('role') as MemberRole) || 'member';
 
-    if (joinBoardId && currentUser?.email) {
-      const cleanEmail = currentUser.email.toLowerCase().trim();
-      const userName = currentUser.name || cleanEmail.split('@')[0];
-      const avatarUrl = currentUser.avatarUrl;
-
-      supabaseService.addMember(joinBoardId, {
-        id: uid(),
-        name: userName,
-        email: cleanEmail,
-        color: '#6366f1',
-        avatarUrl,
-        role: inviteRole,
-      }).then(() => {
-        loadBoardsFromCloud(cleanEmail).then(() => {
-          switchBoard(joinBoardId);
-          setPage('board');
-          showToast(`Welcome! You joined the board as ${inviteRole === 'admin' ? 'an Admin' : inviteRole === 'observer' ? 'an Observer' : 'a Member'}.`, 'success');
-        });
-      });
-
-      // Clean up URL parameter cleanly without reloading
-      window.history.replaceState({}, document.title, window.location.pathname);
+    if (joinBoardId) {
+      const inviteObj = { boardId: joinBoardId, role: inviteRole };
+      setPendingInvite(inviteObj);
+      try {
+        sessionStorage.setItem('worklane_pending_invite', JSON.stringify(inviteObj));
+      } catch {}
+    } else {
+      try {
+        const saved = sessionStorage.getItem('worklane_pending_invite');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.boardId) {
+            setPendingInvite(parsed);
+          }
+        }
+      } catch {}
     }
-  }, [currentUser?.email, switchBoard, loadBoardsFromCloud, showToast]);
+  }, []);
 
   // Load cloud boards & notifications when user is logged in
   useEffect(() => {
@@ -311,6 +309,31 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
     setOpenCardId(cardId);
     setOpenCardBoardId(boardId || activeBoardId);
   };
+
+  // ── Dedicated Board Invite Landing Page ──
+  if (pendingInvite) {
+    return (
+      <div className="app-layout">
+        <InviteLandingPage
+          boardId={pendingInvite.boardId}
+          role={pendingInvite.role}
+          onAcceptJoin={(boardId) => {
+            sessionStorage.removeItem('worklane_pending_invite');
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setPendingInvite(null);
+            handleSelectBoard(boardId);
+          }}
+          onDecline={() => {
+            sessionStorage.removeItem('worklane_pending_invite');
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setPendingInvite(null);
+            setPage('dashboard');
+          }}
+        />
+        <Toast />
+      </div>
+    );
+  }
 
   // ── Authentication Check ──
   if (!isAuthenticated) {

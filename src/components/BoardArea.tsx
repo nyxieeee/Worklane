@@ -263,21 +263,6 @@ export default function BoardArea({
         )}
       </div>
 
-      {/* Floating Inbox Drawer */}
-      <InboxDrawer
-        isOpen={showInbox}
-        onClose={() => controlledToggleInbox ? controlledToggleInbox() : setInternalShowInbox(false)}
-        board={board}
-        onOpenCard={onOpenCard}
-        onDragStart={(e, cardId) => {
-          if (isObserver) return;
-          setDragState({ cardId, fromColId: 'inbox', fromInbox: true });
-          e.dataTransfer.effectAllowed = 'move';
-        }}
-        onDragEnd={() => setDragState(null)}
-        dragState={dragState}
-      />
-
       <AnimatePresence mode="wait">
         {viewMode === 'list' && (
           <motion.div
@@ -542,6 +527,22 @@ export default function BoardArea({
             className="board-area"
             style={{ transformStyle: 'preserve-3d' }}
           >
+            {/* Docked Inbox Drawer - sits as first column, shifting all columns to the right */}
+            <InboxDrawer
+              isOpen={showInbox}
+              onClose={() => controlledToggleInbox ? controlledToggleInbox() : setInternalShowInbox(false)}
+              board={board}
+              onOpenCard={onOpenCard}
+              onDragStart={(e, cardId) => {
+                if (isObserver) return;
+                setDragState({ cardId, fromColId: 'inbox', fromInbox: true });
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragEnd={() => setDragState(null)}
+              dragState={dragState}
+              docked={true}
+            />
+
             {filteredColumns.map((col, idx) => (
               <motion.div
                 key={col.id}

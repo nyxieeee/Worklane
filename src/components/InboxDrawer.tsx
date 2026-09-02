@@ -16,6 +16,7 @@ interface Props {
   onDragStart?: (e: React.DragEvent, cardId: string) => void;
   onDragEnd?: () => void;
   dragState?: { cardId: string; fromColId: string; fromInbox?: boolean } | null;
+  docked?: boolean;
 }
 
 export function InboxDrawer({
@@ -26,6 +27,7 @@ export function InboxDrawer({
   onDragStart,
   onDragEnd,
   dragState,
+  docked = false,
 }: Props) {
   const [newTitle, setNewTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,12 +83,26 @@ export function InboxDrawer({
     <AnimatePresence>
       {isOpen && (
         <motion.aside
-          initial={{ x: -340, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: -340, opacity: 0 }}
-          transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-          className="inbox-drawer-panel"
-          style={{
+          initial={docked ? { width: 0, opacity: 0, scale: 0.96 } : { x: -340, opacity: 0 }}
+          animate={docked ? { width: 320, opacity: 1, scale: 1 } : { x: 0, opacity: 1 }}
+          exit={docked ? { width: 0, opacity: 0, scale: 0.96 } : { x: -340, opacity: 0 }}
+          transition={{ duration: 0.25, ease: [0.25, 1, 0.5, 1] }}
+          className={`inbox-drawer-panel ${docked ? 'inbox-docked' : ''}`}
+          style={docked ? {
+            position: 'relative',
+            width: 320,
+            minWidth: 320,
+            maxWidth: 320,
+            height: '100%',
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: 'hsl(var(--card))',
+            border: '1.5px solid hsl(var(--primary) / 0.35)',
+            borderRadius: 14,
+            boxShadow: 'var(--neu-shadow-raised)',
+            overflow: 'hidden',
+          } : {
             position: 'absolute',
             top: 16,
             left: 16,

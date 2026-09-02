@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye, Crown, Info } from 'lucide-react';
+import { X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye, Crown, Info, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useToastStore } from '../store/useToastStore';
@@ -77,7 +77,7 @@ export default function MembersModal({ onClose }: Props) {
   };
 
   const handleAdd = () => {
-    if (!name.trim()) return;
+    if (!canManage || !name.trim()) return;
     const trimmedEmail = email.trim();
     const result = addMember(name.trim(), trimmedEmail, avatarUrl, role);
     if (result === null && trimmedEmail) {
@@ -363,77 +363,97 @@ export default function MembersModal({ onClose }: Props) {
             )}
           </div>
 
-          {/* Add Member Form */}
-          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid hsl(var(--border) / 0.6)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <label className="field-label" style={{ margin: 0 }}>Add New Team Member</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.1fr', gap: 8, alignItems: 'center' }}>
-              <input
-                type="text"
-                className="text-input"
-                placeholder="Full Name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-              />
-              <input
-                type="email"
-                className="text-input"
-                placeholder="Email Address"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-              />
-              <NeumorphicSelect
-                value={role}
-                options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
-                onChange={setRole}
-                size="md"
-              />
-            </div>
+          {/* Add Member Form (Owner & Admin Only) */}
+          {canManage ? (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid hsl(var(--border) / 0.6)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label className="field-label" style={{ margin: 0 }}>Add New Team Member</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.1fr', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="text-input"
+                  placeholder="Full Name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                />
+                <input
+                  type="email"
+                  className="text-input"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+                <NeumorphicSelect
+                  value={role}
+                  options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
+                  onChange={setRole}
+                  size="md"
+                />
+              </div>
 
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  backgroundColor: 'hsl(var(--muted) / 0.35)',
+                  border: '1px solid hsl(var(--border) / 0.5)',
+                  fontSize: 11.5,
+                  color: 'hsl(var(--muted-foreground))',
+                  lineHeight: 1.45,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Info size={13} style={{ color: 'hsl(var(--primary))' }} />
+                  <span>Role Permissions:</span>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <li>
+                    <strong style={{ color: 'hsl(var(--foreground))' }}>Admin:</strong> Assign tasks, manage members, and configure boards.
+                  </li>
+                  <li>
+                    <strong style={{ color: 'hsl(var(--foreground))' }}>Member:</strong> Complete assigned cards, edit details, and post comments.
+                  </li>
+                  <li>
+                    <strong style={{ color: 'hsl(var(--foreground))' }}>Observer:</strong> Read-only intern mode — study architecture, view task guides, and reply to comments.
+                  </li>
+                </ul>
+              </div>
+
+              <motion.button
+                whileTap={(name.trim() && email.trim()) ? { scale: 0.95 } : undefined}
+                className="btn btn-primary"
+                onClick={handleAdd}
+                disabled={!name.trim() || !email.trim()}
+                style={{
+                  alignSelf: 'flex-start',
+                  opacity: (name.trim() && email.trim()) ? 1 : 0.5,
+                  cursor: (name.trim() && email.trim()) ? 'pointer' : 'not-allowed',
+                }}
+              >
+                <UserPlus size={14} /> Add to Team
+              </motion.button>
+            </div>
+          ) : (
             <div
               style={{
+                marginTop: 14,
+                padding: '12px 14px',
+                borderRadius: 'var(--radius)',
+                backgroundColor: 'hsl(var(--card))',
+                boxShadow: 'var(--neu-shadow-input)',
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-                padding: '10px 12px',
-                borderRadius: 8,
-                backgroundColor: 'hsl(var(--muted) / 0.35)',
-                border: '1px solid hsl(var(--border) / 0.5)',
+                alignItems: 'center',
+                gap: 8,
                 fontSize: 11.5,
                 color: 'hsl(var(--muted-foreground))',
-                lineHeight: 1.45,
               }}
             >
-              <div style={{ fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <Info size={13} style={{ color: 'hsl(var(--primary))' }} />
-                <span>Role Permissions:</span>
-              </div>
-              <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <li>
-                  <strong style={{ color: 'hsl(var(--foreground))' }}>Admin:</strong> Assign tasks, manage members, and configure boards.
-                </li>
-                <li>
-                  <strong style={{ color: 'hsl(var(--foreground))' }}>Member:</strong> Complete assigned cards, edit details, and post comments.
-                </li>
-                <li>
-                  <strong style={{ color: 'hsl(var(--foreground))' }}>Observer:</strong> Read-only intern mode — study architecture, view task guides, and reply to comments.
-                </li>
-              </ul>
+              <Lock size={13} style={{ color: 'hsl(var(--primary))', flexShrink: 0 }} />
+              <span>Only the board owner and admins can invite or add new team members.</span>
             </div>
-
-            <motion.button
-              whileTap={(name.trim() && email.trim()) ? { scale: 0.95 } : undefined}
-              className="btn btn-primary"
-              onClick={handleAdd}
-              disabled={!name.trim() || !email.trim()}
-              style={{
-                alignSelf: 'flex-start',
-                opacity: (name.trim() && email.trim()) ? 1 : 0.5,
-                cursor: (name.trim() && email.trim()) ? 'pointer' : 'not-allowed',
-              }}
-            >
-              <UserPlus size={14} /> Add to Team
-            </motion.button>
-          </div>
+          )}
 
           {/* Leave Board Option for enrolled non-owner members only */}
           {!isOwner && !!currentMemberObj && (

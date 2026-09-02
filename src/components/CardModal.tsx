@@ -3,7 +3,8 @@ import {
   AlignLeft, Paperclip, MessageSquare, Calendar, Tag, Users,
   Trash2, CheckSquare, Square, Download, X, Send, Plus, Check,
   Eye, Image as ImageIcon, Maximize2, AtSign, Reply, Sparkles,
-  FileSpreadsheet, FileText, FileCode, FileArchive, File, Lock
+  FileSpreadsheet, FileText, FileCode, FileArchive, File, Lock,
+  Edit3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -61,6 +62,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const currentUser = useAuthStore(s => s.user);
 
   const [commentText, setCommentText] = useState('');
+  const [replyText, setReplyText] = useState('');
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const [newLabelName, setNewLabelName] = useState('');
   const [newLabelColor] = useState('#3b82f6');
@@ -177,11 +179,19 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const handlePostComment = () => {
     const text = commentText.trim();
     if (!text) return;
-    addComment(cardId, text, replyingTo?.id || null, replyingTo?.author || null);
+    addComment(cardId, text, null, null);
     setCommentText('');
-    setReplyingTo(null);
     setShowMentionMenu(false);
     showToast('Comment posted', 'success');
+  };
+
+  const handlePostReply = (parentId: string, replyToAuthor: string) => {
+    const text = replyText.trim();
+    if (!text) return;
+    addComment(cardId, text, parentId, replyToAuthor);
+    setReplyText('');
+    setReplyingTo(null);
+    showToast('Reply posted', 'success');
   };
 
   const filteredMentionMembers = useMemo(() => {
@@ -450,15 +460,33 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
           {/* Main Area */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {/* Title Field */}
-            <div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 6px 0' }}>
+                <Edit3 size={13} /> Card Title
+              </label>
               <textarea
                 className="textarea-input"
-                style={{ fontSize: 16, fontWeight: 600, resize: 'none', border: 'none', background: 'transparent', padding: '4px 0', outline: 'none', boxShadow: 'none' }}
+                style={{
+                  fontSize: 15,
+                  fontWeight: 600,
+                  resize: 'none',
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radius)',
+                  backgroundColor: 'hsl(var(--card))',
+                  boxShadow: 'var(--neu-shadow-input)',
+                  border: '1px solid hsl(var(--border) / 0.6)',
+                  color: 'hsl(var(--foreground))',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  lineHeight: 1.4,
+                  minHeight: 44,
+                }}
                 value={localTitle}
                 rows={1}
                 onChange={e => setLocalTitle(e.target.value)}
                 onBlur={handleTitleBlur}
-                placeholder="Card Title"
+                placeholder="Enter card title..."
               />
             </div>
 
@@ -705,36 +733,6 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                 )}
               </div>
 
-              {/* Replying Banner */}
-              {replyingTo && (
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '6px 12px',
-                    borderRadius: '8px 8px 0 0',
-                    background: 'hsl(var(--primary) / 0.12)',
-                    border: '1px solid hsl(var(--primary) / 0.3)',
-                    borderBottom: 'none',
-                    fontSize: 11.5,
-                    color: 'hsl(var(--primary))',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Reply size={12} />
-                    <span>Replying to <strong>@{replyingTo.author}</strong></span>
-                  </div>
-                  <button
-                    onClick={() => setReplyingTo(null)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--muted-foreground))', padding: 2 }}
-                    title="Cancel reply"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-              )}
-
               {/* Mention Autocomplete Dropdown */}
               <AnimatePresence>
                 {showMentionMenu && filteredMentionMembers.length > 0 && (
@@ -820,15 +818,11 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                   ref={commentInputRef}
                   type="text"
                   className="text-input"
-                  placeholder={replyingTo ? `Reply to @${replyingTo.author}...` : "Write a comment or type @ to mention..."}
+                  placeholder="Write a comment or type @ to mention..."
                   value={commentText}
                   onChange={handleCommentChange}
                   onKeyDown={handleCommentKeyDown}
                   onBlur={() => setTimeout(() => setShowMentionMenu(false), 200)}
-                  style={{
-                    borderTopLeftRadius: replyingTo ? 0 : undefined,
-                    borderTopRightRadius: replyingTo ? 0 : undefined,
-                  }}
                 />
                 <motion.button
                   whileTap={commentText.trim() ? { scale: 0.92 } : undefined}
@@ -902,8 +896,8 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                               <motion.button
                                 whileTap={{ scale: 0.94 }}
                                 onClick={() => {
-                                  setReplyingTo(c);
-                                  commentInputRef.current?.focus();
+                                  setReplyingTo({ id: c.id, author: c.author } as Comment);
+                                  setReplyText('');
                                 }}
                                 style={{
                                   background: 'hsl(var(--secondary))',
@@ -987,7 +981,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                     <button
                                       onClick={() => {
                                         setReplyingTo({ id: c.id, author: reply.author } as Comment);
-                                        commentInputRef.current?.focus();
+                                        setReplyText('');
                                       }}
                                       style={{
                                         background: 'none',
@@ -1010,6 +1004,79 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                 </div>
                               ))}
                             </div>
+                          )}
+
+                          {/* Inline Reply Composer directly at the bottom of this comment thread */}
+                          {replyingTo?.id === c.id && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -4 }}
+                              style={{
+                                marginLeft: 20,
+                                padding: '8px 12px',
+                                borderRadius: 'var(--radius)',
+                                backgroundColor: 'hsl(var(--card))',
+                                border: '1px solid hsl(var(--primary) / 0.5)',
+                                boxShadow: 'var(--neu-shadow-raised-sm)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 6,
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: 'hsl(var(--primary))' }}>
+                                  <Reply size={11} />
+                                  <span>Replying to <strong>@{replyingTo.author}</strong></span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReplyingTo(null);
+                                    setReplyText('');
+                                  }}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--muted-foreground))', padding: 2 }}
+                                  title="Cancel reply"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  className="text-input"
+                                  placeholder={`Reply to @${replyingTo.author}...`}
+                                  value={replyText}
+                                  onChange={e => setReplyText(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      handlePostReply(c.id, replyingTo.author);
+                                    } else if (e.key === 'Escape') {
+                                      setReplyingTo(null);
+                                      setReplyText('');
+                                    }
+                                  }}
+                                  style={{ fontSize: 12, padding: '6px 10px' }}
+                                />
+                                <motion.button
+                                  whileTap={replyText.trim() ? { scale: 0.94 } : undefined}
+                                  className="btn btn-primary"
+                                  onClick={() => handlePostReply(c.id, replyingTo.author)}
+                                  disabled={!replyText.trim()}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: 12,
+                                    opacity: replyText.trim() ? 1 : 0.5,
+                                    cursor: replyText.trim() ? 'pointer' : 'not-allowed',
+                                  }}
+                                >
+                                  <Send size={12} />
+                                </motion.button>
+                              </div>
+                            </motion.div>
                           )}
                         </div>
                       );

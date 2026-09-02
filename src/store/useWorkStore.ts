@@ -179,7 +179,12 @@ export const useWorkStore = create<WorkState>()(
 
               if (hasPendingSync || isRecentMutation) {
                 const localBoard = s.boards.find(lb => lb.id === cb.id);
-                if (localBoard) return localBoard;
+                if (localBoard) {
+                  return {
+                    ...localBoard,
+                    members: cb.members || localBoard.members,
+                  };
+                }
               }
               return cb;
             });

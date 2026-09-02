@@ -454,10 +454,17 @@ export const useAuthStore = create<AuthState>()(
       signInWithGoogle: async (email?: string) => {
         if (isSupabaseConfigured()) {
           try {
+            if (window.location.search || window.location.hash) {
+              window.history.replaceState({}, document.title, window.location.origin);
+            }
             const { error } = await supabase.auth.signInWithOAuth({
               provider: 'google',
               options: {
                 redirectTo: window.location.origin,
+                queryParams: {
+                  access_type: 'offline',
+                  prompt: 'select_account',
+                },
               },
             });
             if (error) return { success: false, error: error.message };

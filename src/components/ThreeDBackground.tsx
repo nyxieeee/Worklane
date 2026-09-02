@@ -301,12 +301,12 @@ export default function ThreeDBackground({ isDark }: Props) {
 
     // 7. Organic, Non-Repeating 60FPS Render Loop
     let animationFrameId: number;
-    const clock = new THREE.Clock();
+    const startTime = performance.now();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
 
-      const elapsedTime = clock.getElapsedTime();
+      const elapsedTime = (performance.now() - startTime) * 0.001;
       const isDarkActive = isDarkRef.current;
 
       // Smoothly update theme settings

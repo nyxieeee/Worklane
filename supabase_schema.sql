@@ -369,3 +369,25 @@ begin
   delete from auth.users where id = v_user_id;
 end;
 $$ language plpgsql security definer;
+
+-- ==============================================================================
+-- 20. ENABLE SUPABASE REALTIME REPLICATION (Instant Board & Member Updates)
+-- ==============================================================================
+do $$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+end;
+$$;
+
+alter publication supabase_realtime add table public.boards;
+alter publication supabase_realtime add table public.board_members;
+alter publication supabase_realtime add table public.columns;
+alter publication supabase_realtime add table public.cards;
+alter publication supabase_realtime add table public.card_assignees;
+alter publication supabase_realtime add table public.card_labels;
+alter publication supabase_realtime add table public.comments;
+alter publication supabase_realtime add table public.notifications;
+alter publication supabase_realtime add table public.profiles;
+

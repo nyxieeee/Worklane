@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
@@ -83,6 +83,28 @@ export default function App() {
     }
   }, []);
 
+  // Intercept and handle OAuth redirect errors (e.g. bad_oauth_state after session clear)
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const errorDesc = searchParams.get('error_description') || hashParams.get('error_description') || searchParams.get('error') || hashParams.get('error');
+
+      if (errorDesc) {
+        console.warn('[Supabase Auth] OAuth redirect error in URL:', errorDesc);
+        // Clean URL to prevent infinite error loops on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+        useToastStore.getState().showToast(
+          errorDesc.includes('bad_oauth_state') || errorDesc.includes('expired')
+            ? 'Google Sign In was interrupted or expired. Please click Sign In with Google again.'
+            : decodeURIComponent(errorDesc.replace(/\+/g, ' ')),
+          'warning',
+          5000
+        );
+      }
+    } catch {}
+  }, []);
+
   // Load cloud boards & notifications when user is logged in
   useEffect(() => {
     if (currentUser?.email) {
@@ -104,15 +126,34 @@ export default function App() {
         if (boardsDebounceTimer) clearTimeout(boardsDebounceTimer);
         boardsDebounceTimer = window.setTimeout(() => {
           loadBoardsFromCloud(email);
-        }, 1200);
+        }, 200);
       },
       () => {
         loadNotificationsFromCloud(email);
       }
     );
+
+    // Fast sync on tab focus or visibility change
+    const handleFocusSync = () => {
+      loadBoardsFromCloud(email);
+      loadNotificationsFromCloud(email);
+    };
+
+    window.addEventListener('focus', handleFocusSync);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') handleFocusSync();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 5-second background sync fallback
+    const interval = setInterval(handleFocusSync, 5000);
+
     return () => {
       if (boardsDebounceTimer) clearTimeout(boardsDebounceTimer);
       unsub();
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(interval);
     };
   }, [currentUser?.email, loadBoardsFromCloud, loadNotificationsFromCloud]);
 
@@ -132,11 +173,54 @@ export default function App() {
     }
   }, [isDark]);
 
+  // Helper to read initial navigation state on load/refresh
+  const getInitialRouting = () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlPage = params.get('page');
+      const urlBoard = params.get('board') || params.get('b');
+      const urlView = params.get('view') as 'board' | 'list' | 'calendar' | null;
+      const urlCard = params.get('card') || params.get('c');
+
+      const savedPage = localStorage.getItem('worklane_current_page_v1') as 'dashboard' | 'board' | null;
+      const savedView = localStorage.getItem('worklane_current_view_mode_v1') as 'board' | 'list' | 'calendar' | null;
+      const savedCard = localStorage.getItem('worklane_current_card_v1');
+
+      let initialPage: 'dashboard' | 'board' = 'dashboard';
+      if (urlPage === 'board' || urlBoard || (urlPage !== 'dashboard' && savedPage === 'board')) {
+        initialPage = 'board';
+      }
+
+      const validViews: Array<'board' | 'list' | 'calendar'> = ['board', 'list', 'calendar'];
+      const initialView = validViews.includes(urlView as any)
+        ? (urlView as 'board' | 'list' | 'calendar')
+        : validViews.includes(savedView as any)
+        ? (savedView as 'board' | 'list' | 'calendar')
+        : 'board';
+
+      return {
+        page: initialPage,
+        boardId: urlBoard || null,
+        viewMode: initialView,
+        cardId: urlCard || savedCard || null,
+      };
+    } catch {
+      return {
+        page: 'dashboard' as const,
+        boardId: null,
+        viewMode: 'board' as const,
+        cardId: null,
+      };
+    }
+  };
+
+  const initialRouting = useMemo(() => getInitialRouting(), []);
+
   // Page routing: dashboard (home) or board (active board view)
-  const [page, setPage] = useState<'dashboard' | 'board'>('dashboard');
+  const [page, setPage] = useState<'dashboard' | 'board'>(initialRouting.page);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [openCardId, setOpenCardId] = useState<string | null>(initialRouting.cardId);
   const [openCardBoardId, setOpenCardBoardId] = useState<string | null>(null);
   const [showCreateBoard, setShowCreateBoard] = useState(false);
   const [showAddColumn, setShowAddColumn] = useState(false);
@@ -155,12 +239,64 @@ export default function App() {
   }, []);
 
   // Active view layout & team member filter
-  const [viewMode, setViewMode] = useState<'board' | 'list' | 'calendar'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'list' | 'calendar'>(initialRouting.viewMode);
   const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
+
+  // Synchronize board from URL on initial mount
+  useEffect(() => {
+    if (initialRouting.boardId) {
+      switchBoard(initialRouting.boardId);
+    }
+  }, [initialRouting.boardId, switchBoard]);
+
+  // Keep URL search params and localStorage in sync as user navigates
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    try {
+      localStorage.setItem('worklane_current_page_v1', page);
+      localStorage.setItem('worklane_current_view_mode_v1', viewMode);
+      if (openCardId) {
+        localStorage.setItem('worklane_current_card_v1', openCardId);
+      } else {
+        localStorage.removeItem('worklane_current_card_v1');
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      // Preserve invite flow params if present
+      if (!params.has('joinBoard') && !params.has('invite')) {
+        if (page === 'dashboard') {
+          params.set('page', 'dashboard');
+          params.delete('board');
+          params.delete('b');
+          params.delete('card');
+          params.delete('c');
+          if (viewMode !== 'board') params.set('view', viewMode);
+          else params.delete('view');
+        } else if (page === 'board') {
+          params.set('page', 'board');
+          if (activeBoardId) params.set('board', activeBoardId);
+          if (viewMode !== 'board') params.set('view', viewMode);
+          else params.delete('view');
+          if (openCardId) params.set('card', openCardId);
+          else params.delete('card');
+        }
+
+        const newSearch = params.toString() ? `?${params.toString()}` : window.location.pathname;
+        window.history.replaceState({}, document.title, newSearch);
+      }
+    } catch {}
+  }, [page, activeBoardId, viewMode, openCardId, isAuthenticated]);
 
   // When user logs out, reset to dashboard
   useEffect(() => {
-    if (!isAuthenticated) setPage('dashboard');
+    if (!isAuthenticated) {
+      setPage('dashboard');
+      try {
+        localStorage.setItem('worklane_current_page_v1', 'dashboard');
+        localStorage.removeItem('worklane_current_card_v1');
+      } catch {}
+    }
   }, [isAuthenticated]);
 
   // If currently on a board that gets deleted, safely switch to next board or return to overview
@@ -181,7 +317,17 @@ export default function App() {
   const handleSelectBoard = useCallback((boardId: string) => {
     switchBoard(boardId);
     setPage('board');
+    try {
+      localStorage.setItem('worklane_current_page_v1', 'board');
+    } catch {}
   }, [switchBoard]);
+
+  const handleGoToDashboard = useCallback(() => {
+    setPage('dashboard');
+    try {
+      localStorage.setItem('worklane_current_page_v1', 'dashboard');
+    } catch {}
+  }, []);
 
   // Global Keyboard Shortcut: Cmd+K / Ctrl+K for search
   useEffect(() => {
@@ -360,7 +506,7 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
           onOpenSettings={handleOpenSettings}
           onToggleNotif={() => setNotifOpen(o => !o)}
           onCreateBoard={() => setShowCreateBoard(true)}
-          onGoToDashboard={() => setPage('dashboard')}
+          onGoToDashboard={handleGoToDashboard}
           onSelectBoard={handleSelectBoard}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(c => !c)}

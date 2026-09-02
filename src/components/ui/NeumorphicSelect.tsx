@@ -19,6 +19,7 @@ interface Props<T extends string = string> {
   disabled?: boolean;
   style?: React.CSSProperties;
   className?: string;
+  placement?: 'top' | 'bottom' | 'auto';
 }
 
 export function NeumorphicSelect<T extends string = string>({
@@ -30,13 +31,15 @@ export function NeumorphicSelect<T extends string = string>({
   disabled = false,
   style,
   className,
+  placement = 'auto',
 }: Props<T>) {
   const [isOpen, setIsOpen] = useState(false);
+  const [computedPlacement, setComputedPlacement] = useState<'top' | 'bottom'>('bottom');
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find(o => o.value === value);
 
-  // Close on click outside
+  // Close on click outside & calculate auto placement
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -44,14 +47,23 @@ export function NeumorphicSelect<T extends string = string>({
       }
     }
     if (isOpen) {
+      if (placement === 'auto' && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        // If less than 200px below, flip to open upwards
+        setComputedPlacement(spaceBelow < 200 ? 'top' : 'bottom');
+      } else {
+        setComputedPlacement(placement === 'top' ? 'top' : 'bottom');
+      }
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isOpen]);
+  }, [isOpen, placement]);
 
   const isSmall = size === 'sm';
+  const isTop = computedPlacement === 'top';
 
   return (
     <div
@@ -61,6 +73,7 @@ export function NeumorphicSelect<T extends string = string>({
         display: 'inline-block',
         width: isSmall ? 'auto' : '100%',
         minWidth: isSmall ? 130 : 160,
+        zIndex: isOpen ? 100 : 'auto',
         ...style,
       }}
       className={className}
@@ -120,27 +133,29 @@ export function NeumorphicSelect<T extends string = string>({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.96 }}
-            animate={{ opacity: 1, y: 4, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.96 }}
+            initial={{ opacity: 0, y: isTop ? 6 : -6, scale: 0.96 }}
+            animate={{ opacity: 1, y: isTop ? -4 : 4, scale: 1 }}
+            exit={{ opacity: 0, y: isTop ? 6 : -6, scale: 0.96 }}
             transition={{ duration: 0.16, ease: 'easeOut' }}
             style={{
               position: 'absolute',
-              top: '100%',
+              top: isTop ? 'auto' : '100%',
+              bottom: isTop ? '100%' : 'auto',
               left: 0,
               right: 0,
-              zIndex: 100,
-              minWidth: isSmall ? 170 : '100%',
-              backgroundColor: 'hsl(var(--card) / 0.97)',
+              zIndex: 9999,
+              minWidth: isSmall ? 175 : '100%',
+              backgroundColor: 'hsl(var(--card) / 0.98)',
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
               border: '1px solid hsl(var(--border) / 0.9)',
               borderRadius: 12,
               padding: 5,
-              boxShadow: '0 12px 30px -4px rgba(0,0,0,0.18), 0 4px 12px -2px rgba(0,0,0,0.1), var(--neu-shadow-raised-sm)',
+              boxShadow: '0 16px 36px -4px rgba(0,0,0,0.25), 0 6px 16px -2px rgba(0,0,0,0.12), var(--neu-shadow-raised)',
               display: 'flex',
               flexDirection: 'column',
               gap: 2,
+              transformOrigin: isTop ? 'bottom center' : 'top center',
             }}
           >
             {options.map((opt) => {

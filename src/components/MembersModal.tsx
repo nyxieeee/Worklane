@@ -222,7 +222,7 @@ export default function MembersModal({ onClose }: Props) {
           </button>
         </div>
 
-        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', overflowX: 'visible', maxHeight: '72vh', paddingBottom: 16 }}>
           {/* Current Members List */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {members.length === 0 ? (
@@ -230,7 +230,7 @@ export default function MembersModal({ onClose }: Props) {
                 No members found
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto', paddingRight: 4 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'visible' }}>
                 {members.map(member => {
                   const isCurrent = !!(member.email && currentEmail && member.email.toLowerCase().trim() === currentEmail);
                   const isMemberOwner = !!(board.createdBy && member.email && board.createdBy.toLowerCase().trim() === member.email.toLowerCase().trim());
@@ -711,11 +711,12 @@ export default function MembersModal({ onClose }: Props) {
               <AnimatePresence>
                 {showInviteTab && (
                   <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
                     style={{
-                      overflow: 'hidden',
+                      overflow: 'visible',
+                      position: 'relative',
                       padding: '12px 14px',
                       borderRadius: 12,
                       backgroundColor: 'hsl(var(--muted) / 0.3)',
@@ -733,12 +734,13 @@ export default function MembersModal({ onClose }: Props) {
                       Anyone with this link who registers or signs in with Google will automatically join this board.
                     </p>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 8, alignItems: 'center', marginTop: 2, position: 'relative' }}>
                       <NeumorphicSelect
                         value={inviteRole}
                         options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
                         onChange={setInviteRole}
                         size="sm"
+                        placement="top"
                       />
                       <motion.button
                         whileTap={{ scale: 0.95 }}

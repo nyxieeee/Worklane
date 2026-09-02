@@ -54,6 +54,7 @@ export default function MembersModal({ onClose }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<RegisteredUser[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<RegisteredUser | null>(null);
   const [role, setRole] = useState<AssignableRole>('member');
 
@@ -86,6 +87,7 @@ export default function MembersModal({ onClose }: Props) {
     if (!trimmed) {
       setSearchResults([]);
       setIsSearching(false);
+      setLastSearchedQuery('');
       return;
     }
 
@@ -94,12 +96,13 @@ export default function MembersModal({ onClose }: Props) {
       try {
         const results = await supabaseService.searchRegisteredProfiles(trimmed);
         setSearchResults(results);
+        setLastSearchedQuery(trimmed);
       } catch (err) {
         console.warn('Search error:', err);
       } finally {
         setIsSearching(false);
       }
-    }, 280);
+    }, 220);
 
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -457,7 +460,17 @@ export default function MembersModal({ onClose }: Props) {
                       className="text-input"
                       placeholder="Search registered user by name or email..."
                       value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setSearchQuery(val);
+                        if (!val.trim()) {
+                          setSearchResults([]);
+                          setIsSearching(false);
+                          setLastSearchedQuery('');
+                        } else {
+                          setIsSearching(true);
+                        }
+                      }}
                       style={{ paddingLeft: 34, paddingRight: isSearching ? 34 : searchQuery ? 30 : 12 }}
                     />
                     {isSearching ? (
@@ -473,7 +486,7 @@ export default function MembersModal({ onClose }: Props) {
                     ) : searchQuery ? (
                       <button
                         type="button"
-                        onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                        onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearching(false); setLastSearchedQuery(''); }}
                         style={{
                           position: 'absolute',
                           right: 10,
@@ -491,16 +504,21 @@ export default function MembersModal({ onClose }: Props) {
                     ) : null}
                   </div>
 
-                  {/* Search Results Dropdown */}
+                  {/* Search Results Dropdown - Floating overlay that doesn't shift the modal */}
                   {searchQuery.trim().length > 0 && (
                     <div
                       style={{
-                        marginTop: 6,
+                        position: 'absolute',
+                        top: 'calc(100% + 6px)',
+                        left: 0,
+                        right: 0,
+                        zIndex: 60,
                         backgroundColor: 'hsl(var(--card))',
-                        borderRadius: 10,
-                        boxShadow: 'var(--neu-shadow-raised)',
-                        border: '1px solid hsl(var(--border) / 0.7)',
-                        maxHeight: 190,
+                        borderRadius: 12,
+                        boxShadow: '0 12px 32px -4px rgba(0,0,0,0.35), var(--neu-shadow-raised)',
+                        border: '1px solid hsl(var(--border) / 0.85)',
+                        backdropFilter: 'blur(16px)',
+                        maxHeight: 220,
                         overflowY: 'auto',
                         padding: 6,
                         display: 'flex',
@@ -508,7 +526,12 @@ export default function MembersModal({ onClose }: Props) {
                         gap: 4,
                       }}
                     >
-                      {searchResults.length === 0 && !isSearching ? (
+                      {isSearching || lastSearchedQuery !== searchQuery.trim() ? (
+                        <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--muted-foreground))', fontSize: 12 }}>
+                          <Loader2 size={13} className="animate-spin" style={{ color: 'hsl(var(--primary))' }} />
+                          <span>Searching registered users...</span>
+                        </div>
+                      ) : searchResults.length === 0 ? (
                         <div style={{ padding: '10px 12px', fontSize: 12, color: 'hsl(var(--muted-foreground))', display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'hsl(var(--foreground))', fontWeight: 600 }}>
                             <Info size={13} color="hsl(var(--primary))" />

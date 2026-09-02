@@ -41,7 +41,7 @@ const ADMIN_ROLE_OPTIONS: SelectOption<AssignableRole>[] = [
 ];
 
 export default function MembersModal({ onClose }: Props) {
-  const board = useWorkStore(s => s.getActiveBoard());
+  const board = useWorkStore(s => s.boards.find(b => b.id === s.activeBoardId));
   const addMember = useWorkStore(s => s.addMember);
   const updateMember = useWorkStore(s => s.updateMember);
   const removeMember = useWorkStore(s => s.removeMember);

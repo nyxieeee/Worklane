@@ -91,10 +91,33 @@ export default function InviteLandingPage({ boardId, role = 'member', onAcceptJo
         role: role || 'member',
       });
 
-      // 2. Reload boards
+      // 2. Notify the creator in real-time
+      if (boardMeta?.createdBy && boardMeta.createdBy.toLowerCase().trim() !== cleanEmail) {
+        const creatorEmail = boardMeta.createdBy.toLowerCase().trim();
+        try {
+          await supabaseService.createNotification({
+            id: uid(),
+            recipientEmail: creatorEmail,
+            title: 'New Member Joined!',
+            sub: `${userName} joined "${boardMeta.name || 'Workspace Board'}" via invite link.`,
+            icon: 'user-plus',
+            cardId: null,
+            boardId,
+            time: new Date().toISOString(),
+          });
+          await supabaseService.broadcastUpdate('notifications', { recipientEmail: creatorEmail });
+        } catch (nErr) {
+          console.warn('Creator notification error:', nErr);
+        }
+      }
+
+      // 3. Broadcast instant board update across all devices
+      await supabaseService.broadcastUpdate('boards', { boardId, memberEmail: cleanEmail });
+
+      // 4. Reload boards
       await loadBoardsFromCloud(cleanEmail);
 
-      // 3. Trigger accept callback
+      // 5. Trigger accept callback
       onAcceptJoin(boardId);
       showToast(`Welcome to "${boardMeta?.name || 'the board'}"! You joined as ${role === 'admin' ? 'an Admin' : role === 'observer' ? 'an Observer' : 'a Member'}.`, 'success');
     } catch (err: any) {

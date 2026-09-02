@@ -2,6 +2,9 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { Board, Column, Card, Comment, Attachment, Member, MemberRole, Notification } from '../types';
 import { uid, sortMembersWithOwnerFirst } from '../utils';
 
+// Active WebSocket channel reference for instant peer broadcasting
+let activeRealtimeChannel: any = null;
+
 /**
  * Service to interact with Supabase database, storage, and notifications
  */
@@ -446,11 +449,22 @@ export const supabaseService = {
   async broadcastUpdate(event: 'boards' | 'notifications' | 'labels', meta?: any) {
     if (!isSupabaseConfigured()) return;
     try {
+      const payload = { ...meta, timestamp: Date.now() };
+      // If our persistent WebSocket connection is active, send over WebSocket for instant delivery
+      if (activeRealtimeChannel && activeRealtimeChannel.state === 'joined') {
+        await activeRealtimeChannel.send({
+          type: 'broadcast',
+          event,
+          payload,
+        });
+        return;
+      }
+
       const channel = supabase.channel('worklane-realtime-channel');
       await channel.send({
         type: 'broadcast',
         event,
-        payload: { ...meta, timestamp: Date.now() },
+        payload,
       });
     } catch (e) {
       // Non-blocking
@@ -490,8 +504,13 @@ export const supabaseService = {
         return false;
       }
 
+      // Touch the boards table so Postgres WAL emits a boards UPDATE event across all listeners
+      try {
+        await supabase.from('boards').update({ updated_at: new Date().toISOString() }).eq('id', boardId);
+      } catch {}
+
       // Broadcast instant update across all devices
-      this.broadcastUpdate('boards', { boardId, memberEmail: cleanEmail });
+      await this.broadcastUpdate('boards', { boardId, memberEmail: cleanEmail });
 
       return true;
     } catch (err) {
@@ -981,6 +1000,7 @@ export const supabaseService = {
     }
 
     const channel = supabase.channel(channelName);
+    activeRealtimeChannel = channel;
 
     // 1. Instant Peer-to-Peer Broadcast (sub-50ms sync between open windows/devices)
     channel
@@ -1047,6 +1067,9 @@ export const supabaseService = {
     });
 
     return () => {
+      if (activeRealtimeChannel === channel) {
+        activeRealtimeChannel = null;
+      }
       supabase.removeChannel(channel);
     };
   },

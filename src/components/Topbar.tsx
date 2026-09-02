@@ -33,7 +33,7 @@ export default function Topbar({
   notifOpen
 }: Props) {
   const boards            = useWorkStore(s => s.boards);
-  const activeBoard       = useWorkStore(s => s.getActiveBoard());
+  const activeBoard       = useWorkStore(s => s.boards.find(b => b.id === s.activeBoardId));
   const board             = page === 'dashboard' ? null : activeBoard;
   const rawNotifications  = useNotifStore(s => s.notifications);
   const user              = useAuthStore(s => s.user);

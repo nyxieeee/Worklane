@@ -163,28 +163,6 @@ export default function Sidebar({
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.92 }}
-                className={`icon-btn ${isInboxOpen ? 'active' : ''}`}
-                title="Inbox & Concerns"
-                onClick={onOpenInbox}
-                style={{ position: 'relative' }}
-              >
-                <Inbox size={16} />
-                {(activeBoard?.inboxCards?.length || 0) > 0 && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      backgroundColor: 'hsl(var(--primary))',
-                    }}
-                  />
-                )}
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.92 }}
                 className="icon-btn"
                 title="Team Members"
                 onClick={onManageMembers}
@@ -393,29 +371,6 @@ export default function Sidebar({
                 <Calendar size={14} />
                 <span style={{ flex: 1 }}>Calendar</span>
                 {activeView === 'calendar' && <Check size={13} color="hsl(var(--primary))" />}
-              </motion.button>
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                className={`sidebar-nav-item ${isInboxOpen ? 'active' : ''}`}
-                onClick={onOpenInbox}
-              >
-                <Inbox size={14} />
-                <span style={{ flex: 1 }}>Inbox / Concerns</span>
-                {(activeBoard?.inboxCards?.length || 0) > 0 && (
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: '1px 6px',
-                      borderRadius: 8,
-                      backgroundColor: isInboxOpen ? 'hsl(var(--primary) / 0.15)' : 'hsl(var(--muted))',
-                      color: isInboxOpen ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
-                    }}
-                  >
-                    {activeBoard?.inboxCards?.length}
-                  </span>
-                )}
-                {isInboxOpen && <Check size={13} color="hsl(var(--primary))" />}
               </motion.button>
             </div>
 

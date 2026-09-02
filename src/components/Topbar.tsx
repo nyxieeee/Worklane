@@ -136,40 +136,7 @@ export default function Topbar({
           </div>
         )}
 
-        {/* Action icons */}
-        {onOpenInbox && (
-          <motion.button
-            whileTap={{ scale: 0.92 }}
-            className="btn btn-secondary"
-            title="Inbox / Employee Concerns"
-            onClick={onOpenInbox}
-            style={{
-              padding: '4px 10px',
-              fontSize: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              borderRadius: 8,
-            }}
-          >
-            <Inbox size={14} color="hsl(var(--primary))" />
-            <span>Inbox</span>
-            {(activeBoard?.inboxCards?.length || 0) > 0 && (
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: '1px 5px',
-                  borderRadius: 10,
-                  backgroundColor: 'hsl(var(--primary) / 0.15)',
-                  color: 'hsl(var(--primary))',
-                }}
-              >
-                {activeBoard?.inboxCards?.length}
-              </span>
-            )}
-          </motion.button>
-        )}
+
 
         {page === 'board' && onManageMembers && (
           <motion.button

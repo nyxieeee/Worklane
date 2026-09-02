@@ -2,6 +2,7 @@
 import { motion } from "framer-motion";
 import sidebarDark from "../assets/sidebar-dark.png";
 import sidebarLight from "../assets/sidebar.png";
+import logo from "../assets/logo.png";
 
 interface AppLoadingScreenProps {
   isDark?: boolean;
@@ -23,140 +24,106 @@ export default function AppLoadingScreen({ isDark = true }: AppLoadingScreenProp
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  const bg = isDark ? "#0f1117" : "#f3f4f8";
-  const text = isDark ? "#e2e8f0" : "#1e293b";
-  const sub = isDark ? "#64748b" : "#94a3b8";
   const accent = "#6366f1";
-  const sidebarBg = isDark ? sidebarDark : sidebarLight;
+  const bg = isDark ? sidebarDark : sidebarLight;
+  const sub = isDark ? "#94a3b8" : "#64748b";
 
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
+        backgroundImage: `url(${bg})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
         display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
         zIndex: 9999,
         fontFamily: "'Inter', 'Outfit', sans-serif",
-        overflow: "hidden",
       }}
     >
-      {/* Left panel - sidebar image */}
+      {/* Dark overlay so content is readable */}
       <div
         style={{
-          width: 260,
-          flexShrink: 0,
-          backgroundImage: `url(${sidebarBg})`,
-          backgroundSize: "cover",
-          backgroundPosition: "left center",
-          opacity: 0.85,
+          position: "absolute",
+          inset: 0,
+          background: isDark ? "rgba(10,11,18,0.72)" : "rgba(240,242,248,0.65)",
         }}
       />
 
-      {/* Right panel - main content area with loading */}
-      <div
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: "easeOut" }}
         style={{
-          flex: 1,
-          background: bg,
+          position: "relative",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
-          position: "relative",
+          gap: 24,
         }}
       >
-        {/* Radial glow */}
-        <div
+        {/* Logo image */}
+        <motion.img
+          src={logo}
+          alt="Worklane"
+          animate={{ scale: [1, 1.04, 1] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
           style={{
-            position: "absolute",
-            top: "40%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: 500,
-            height: 500,
-            borderRadius: "50%",
-            background: `radial-gradient(circle, ${accent}1a 0%, transparent 70%)`,
-            pointerEvents: "none",
+            width: 96,
+            height: 96,
+            objectFit: "contain",
+            filter: `drop-shadow(0 0 24px ${accent}80)`,
+            borderRadius: 22,
           }}
         />
 
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
+        {/* Subtitle */}
+        <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 24,
-            position: "relative",
+            fontSize: 14,
+            color: sub,
+            letterSpacing: "0.03em",
           }}
         >
-          {/* Animated logo */}
+          Syncing your workspace...
+        </div>
+
+        {/* Progress bar */}
+        <div
+          style={{
+            width: 220,
+            height: 4,
+            borderRadius: 99,
+            background: "rgba(255,255,255,0.1)",
+            overflow: "hidden",
+          }}
+        >
           <motion.div
-            animate={{ scale: [1, 1.06, 1] }}
-            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
             style={{
-              width: 68,
-              height: 68,
-              borderRadius: 20,
-              background: `linear-gradient(135deg, ${accent}, #8b5cf6)`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: `0 0 40px ${accent}50`,
-            }}
-          >
-            <svg width="38" height="38" viewBox="0 0 36 36" fill="none">
-              <rect x="5" y="8" width="10" height="20" rx="3" fill="white" opacity="0.9" />
-              <rect x="18" y="4" width="10" height="24" rx="3" fill="white" opacity="0.7" />
-              <rect x="5" y="31" width="23" height="2" rx="1" fill="white" opacity="0.5" />
-            </svg>
-          </motion.div>
-
-          {/* Title */}
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 26, fontWeight: 700, color: text, letterSpacing: "-0.5px" }}>
-              Worklane
-            </div>
-            <div style={{ fontSize: 13, color: sub, marginTop: 6 }}>
-              Syncing your workspace...
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div
-            style={{
-              width: 240,
-              height: 4,
+              height: "100%",
               borderRadius: 99,
-              background: isDark ? "#ffffff12" : "#00000010",
-              overflow: "hidden",
+              background: `linear-gradient(90deg, ${accent}, #8b5cf6)`,
             }}
-          >
-            <motion.div
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              style={{
-                height: "100%",
-                borderRadius: 99,
-                background: `linear-gradient(90deg, ${accent}, #8b5cf6)`,
-              }}
-            />
-          </div>
+          />
+        </div>
 
-          {/* Pulsing dots */}
-          <div style={{ display: "flex", gap: 6 }}>
-            {[0, 1, 2].map((i) => (
-              <motion.div
-                key={i}
-                animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" }}
-                style={{ width: 6, height: 6, borderRadius: "50%", background: accent }}
-              />
-            ))}
-          </div>
-        </motion.div>
-      </div>
+        {/* Pulsing dots */}
+        <div style={{ display: "flex", gap: 6 }}>
+          {[0, 1, 2].map((i) => (
+            <motion.div
+              key={i}
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" }}
+              style={{ width: 6, height: 6, borderRadius: "50%", background: accent }}
+            />
+          ))}
+        </div>
+      </motion.div>
     </div>
   );
 }

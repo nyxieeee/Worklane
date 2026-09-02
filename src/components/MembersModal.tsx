@@ -220,9 +220,6 @@ export default function MembersModal({ onClose }: Props) {
               {members.length}
             </span>
           </div>
-          <button className="modal-close-btn" onClick={onClose}>
-            <X size={16} />
-          </button>
         </div>
 
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', overflowX: 'visible', maxHeight: '72vh', paddingBottom: 16 }}>

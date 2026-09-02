@@ -626,16 +626,52 @@ export const supabaseService = {
   async removeMemberFromBoard(boardId: string, email?: string, memberId?: string): Promise<boolean> {
     if (!isSupabaseConfigured() || !boardId) return false;
     try {
-      let query = supabase.from('board_members').delete().eq('board_id', boardId);
-      if (email && memberId) {
-        query = query.or(`email.ilike.${email.toLowerCase().trim()},id.eq.${memberId}`);
-      } else if (email) {
-        query = query.ilike('email', email.toLowerCase().trim());
-      } else if (memberId) {
-        query = query.eq('id', memberId);
+      if (memberId) {
+        // 1. Remove from card assignees on this board
+        await supabase
+          .from('card_assignees')
+          .delete()
+          .eq('board_id', boardId)
+          .eq('member_id', memberId);
+
+        // 2. Remove from board members
+        await supabase
+          .from('board_members')
+          .delete()
+          .eq('board_id', boardId)
+          .eq('id', memberId);
       }
-      const { error } = await query;
-      if (error) throw error;
+
+      if (email) {
+        const cleanEmail = email.toLowerCase().trim();
+        // Query any matching member IDs for assignee cleanup
+        const { data: rows } = await supabase
+          .from('board_members')
+          .select('id')
+          .eq('board_id', boardId)
+          .ilike('email', cleanEmail);
+
+        if (rows && rows.length > 0) {
+          const ids = rows.map(r => r.id);
+          await supabase
+            .from('card_assignees')
+            .delete()
+            .eq('board_id', boardId)
+            .in('member_id', ids);
+
+          await supabase
+            .from('board_members')
+            .delete()
+            .eq('board_id', boardId)
+            .in('id', ids);
+        }
+
+        await supabase
+          .from('board_members')
+          .delete()
+          .eq('board_id', boardId)
+          .ilike('email', cleanEmail);
+      }
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error removing board member:', err);

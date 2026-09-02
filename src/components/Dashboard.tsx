@@ -225,10 +225,7 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
               <CheckSquare size={18} />
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span className="dashboard-stat-value">{completedTasks}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#10b981' }}>{completionRate}%</span>
-              </div>
+              <div className="dashboard-stat-value">{completedTasks}</div>
               <div className="dashboard-stat-label">Tasks Completed</div>
             </div>
           </div>

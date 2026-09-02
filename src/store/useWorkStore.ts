@@ -182,7 +182,7 @@ export const useWorkStore = create<WorkState>()(
                 if (localBoard) {
                   return {
                     ...localBoard,
-                    members: cb.members || localBoard.members,
+                    members: cb.members,
                   };
                 }
               }

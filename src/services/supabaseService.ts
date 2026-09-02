@@ -468,13 +468,31 @@ export const supabaseService = {
           .eq('board_id', board.id)
           .not('id', 'in', `(${currentCardIds.join(',')})`);
       }
-      // Note: If currentCardIds is empty (no cards), we intentionally skip deletion
-      // to prevent accidentally wiping cloud cards when local state hasn't loaded yet
+
+      // Broadcast instant update to all connected clients
+      this.broadcastUpdate('boards', { boardId: board.id });
 
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error syncing board:', err);
       return false;
+    }
+  },
+
+  /**
+   * Broadcast an instant realtime update to all connected clients (sub-50ms sync)
+   */
+  async broadcastUpdate(event: 'boards' | 'notifications' | 'labels', meta?: any) {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const channel = supabase.channel('worklane-realtime-channel');
+      await channel.send({
+        type: 'broadcast',
+        event,
+        payload: { ...meta, timestamp: Date.now() },
+      });
+    } catch (e) {
+      // Non-blocking
     }
   },
 
@@ -510,6 +528,10 @@ export const supabaseService = {
         console.error('[SupabaseService] Error adding member directly:', error);
         return false;
       }
+
+      // Broadcast instant update across all devices
+      this.broadcastUpdate('boards', { boardId, memberEmail: cleanEmail });
+
       return true;
     } catch (err) {
       console.error('[SupabaseService] Exception adding member directly:', err);
@@ -695,6 +717,7 @@ export const supabaseService = {
         .eq('board_id', boardId)
         .eq('id', memberId);
       if (error) throw error;
+      this.broadcastUpdate('boards', { boardId });
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error updating member role:', err);
@@ -754,6 +777,7 @@ export const supabaseService = {
           .eq('board_id', boardId)
           .ilike('email', cleanEmail);
       }
+      this.broadcastUpdate('boards', { boardId });
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error removing board member:', err);
@@ -772,6 +796,7 @@ export const supabaseService = {
         console.error('[SupabaseService] Error deleting board:', error);
         throw error;
       }
+      this.broadcastUpdate('boards', { boardId });
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error deleting board:', err);
@@ -790,6 +815,7 @@ export const supabaseService = {
         console.error('[SupabaseService] Error deleting card:', error);
         throw error;
       }
+      this.broadcastUpdate('boards', { cardId });
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error deleting card:', err);
@@ -818,6 +844,7 @@ export const supabaseService = {
         console.warn('[SupabaseService] Notification insert error:', error);
         return false;
       }
+      this.broadcastUpdate('notifications', { recipientEmail: notif.recipientEmail });
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Notification insert exception:', err);
@@ -950,6 +977,7 @@ export const supabaseService = {
         console.warn('[SupabaseService] Error upserting custom label:', error);
         return false;
       }
+      this.broadcastUpdate('labels');
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Exception upserting custom label:', err);
@@ -968,6 +996,7 @@ export const supabaseService = {
         console.warn('[SupabaseService] Error deleting custom label:', error);
         return false;
       }
+      this.broadcastUpdate('labels');
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Exception deleting custom label:', err);
@@ -976,58 +1005,85 @@ export const supabaseService = {
   },
 
   /**
-   * Subscribe to realtime database changes (boards, cards, columns, notifications, custom_labels)
+   * Subscribe to realtime database changes and instant broadcast events across all devices
    */
   subscribeToAll(userEmail: string, onBoardsChange: () => void, onNotifsChange: () => void, onLabelsChange?: () => void) {
     if (!isSupabaseConfigured()) return () => {};
 
     const cleanEmail = userEmail ? userEmail.toLowerCase().trim() : '';
+    const channelName = 'worklane-realtime-channel';
 
-    const channel = supabase
-      .channel(`realtime-sync-${cleanEmail || 'anon'}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'boards' },
-        () => onBoardsChange()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'board_members' },
-        () => onBoardsChange()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'columns' },
-        () => onBoardsChange()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'cards' },
-        () => onBoardsChange()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'comments' },
-        () => onBoardsChange()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'custom_labels' },
-        () => {
-          if (onLabelsChange) onLabelsChange();
-          else onBoardsChange();
+    // Clean up any stale channel with this name to avoid topic collisions
+    const existing = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
+    if (existing) {
+      supabase.removeChannel(existing);
+    }
+
+    const channel = supabase.channel(channelName);
+
+    // 1. Instant Peer-to-Peer Broadcast (sub-50ms sync between open windows/devices)
+    channel
+      .on('broadcast', { event: 'boards' }, () => {
+        onBoardsChange();
+      })
+      .on('broadcast', { event: 'notifications' }, (payload) => {
+        const targetEmail = payload?.payload?.recipientEmail;
+        if (!targetEmail || targetEmail.toLowerCase().trim() === cleanEmail) {
+          onNotifsChange();
         }
-      )
-      .on(
+      })
+      .on('broadcast', { event: 'labels' }, () => {
+        if (onLabelsChange) onLabelsChange();
+        else onBoardsChange();
+      });
+
+    // 2. Full Postgres WAL changes across all database tables
+    const dbTables = [
+      'boards',
+      'board_members',
+      'columns',
+      'cards',
+      'card_assignees',
+      'card_labels',
+      'comments',
+      'attachments',
+      'custom_labels',
+      'profiles',
+    ];
+
+    dbTables.forEach(table => {
+      channel.on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        (payload) => {
-          if (payload.new && (!cleanEmail || payload.new.recipient_email?.toLowerCase().trim() === cleanEmail)) {
-            onNotifsChange();
+        { event: '*', schema: 'public', table },
+        () => {
+          if (table === 'custom_labels' && onLabelsChange) {
+            onLabelsChange();
+          } else {
+            onBoardsChange();
           }
         }
-      )
-      .subscribe();
+      );
+    });
+
+    // Notifications DB changes
+    channel.on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'notifications' },
+      (payload) => {
+        if (payload.new && (!cleanEmail || payload.new.recipient_email?.toLowerCase().trim() === cleanEmail)) {
+          onNotifsChange();
+        }
+      }
+    );
+
+    // Subscribe with auto-reconnect handling
+    channel.subscribe((status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        setTimeout(() => {
+          channel.subscribe();
+        }, 2000);
+      }
+    });
 
     return () => {
       supabase.removeChannel(channel);

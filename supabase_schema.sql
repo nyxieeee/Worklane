@@ -294,24 +294,46 @@ create policy "Allow all access to email_logs" on public.email_logs
   for all using (true) with check (true);
 
 -- ==============================================================================
--- 17. ENABLE REALTIME BROADCASTING
+-- 17. ENABLE REALTIME REPLICATION & REPLICA IDENTITY (Safe & Idempotent)
 -- ==============================================================================
 do $$
+declare
+  tbl text;
+  tables text[] := array[
+    'boards',
+    'board_members',
+    'columns',
+    'cards',
+    'card_assignees',
+    'card_labels',
+    'comments',
+    'attachments',
+    'notifications',
+    'custom_labels',
+    'profiles'
+  ];
 begin
   if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
     create publication supabase_realtime;
   end if;
-end $$;
 
-alter publication supabase_realtime add table public.boards;
-alter publication supabase_realtime add table public.board_members;
-alter publication supabase_realtime add table public.columns;
-alter publication supabase_realtime add table public.cards;
-alter publication supabase_realtime add table public.card_assignees;
-alter publication supabase_realtime add table public.card_labels;
-alter publication supabase_realtime add table public.comments;
-alter publication supabase_realtime add table public.attachments;
-alter publication supabase_realtime add table public.notifications;
+  foreach tbl in array tables
+  loop
+    -- Ensure replica identity full so UPDATE and DELETE emit full row data for Realtime & RLS
+    execute format('alter table public.%I replica identity full', tbl);
+
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = tbl
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', tbl);
+    end if;
+  end loop;
+end;
+$$;
 
 -- ==============================================================================
 -- 18. STORAGE BUCKET FOR ATTACHMENTS
@@ -370,42 +392,4 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- ==============================================================================
--- 20. ENABLE SUPABASE REALTIME REPLICATION (Safe & Idempotent)
--- ==============================================================================
-do $$
-declare
-  tbl text;
-  tables text[] := array[
-    'boards',
-    'board_members',
-    'columns',
-    'cards',
-    'card_assignees',
-    'card_labels',
-    'comments',
-    'notifications',
-    'profiles'
-  ];
-begin
-  -- 1. Ensure the supabase_realtime publication exists
-  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    create publication supabase_realtime;
-  end if;
-
-  -- 2. Safely add each table only if it is not already in the publication
-  foreach tbl in array tables
-  loop
-    if not exists (
-      select 1
-      from pg_publication_tables
-      where pubname = 'supabase_realtime'
-        and schemaname = 'public'
-        and tablename = tbl
-    ) then
-      execute format('alter publication supabase_realtime add table public.%I', tbl);
-    end if;
-  end loop;
-end;
-$$;
 

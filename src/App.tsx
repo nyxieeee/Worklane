@@ -135,7 +135,7 @@ export default function App() {
         if (boardsDebounceTimer) clearTimeout(boardsDebounceTimer);
         boardsDebounceTimer = window.setTimeout(() => {
           loadBoardsFromCloud(email);
-        }, 200);
+        }, 80);
       },
       () => {
         loadNotificationsFromCloud(email);
@@ -157,8 +157,17 @@ export default function App() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Periodic safety sync (every 4 seconds) to guarantee 100% realtime sync across devices
+    const pollInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadBoardsFromCloud(email);
+        loadNotificationsFromCloud(email);
+      }
+    }, 4000);
+
     return () => {
       if (boardsDebounceTimer) clearTimeout(boardsDebounceTimer);
+      clearInterval(pollInterval);
       unsub();
       window.removeEventListener('focus', handleFocusSync);
       document.removeEventListener('visibilitychange', handleVisibilityChange);

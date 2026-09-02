@@ -901,9 +901,73 @@ export const supabaseService = {
   },
 
   /**
-   * Subscribe to realtime database changes (boards, cards, columns, notifications)
+   * Custom Labels: Fetch custom category labels from Supabase
    */
-  subscribeToAll(userEmail: string, onBoardsChange: () => void, onNotifsChange: () => void) {
+  async getCustomLabels(userEmail?: string): Promise<Array<{ id: string; name: string; color: string }>> {
+    if (!isSupabaseConfigured()) return [];
+    try {
+      const { data, error } = await supabase
+        .from('custom_labels')
+        .select('id, name, color')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.warn('[SupabaseService] Error fetching custom labels:', error);
+        return [];
+      }
+      return data || [];
+    } catch (err) {
+      console.warn('[SupabaseService] Exception getting custom labels:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Custom Labels: Upsert a custom label in Supabase
+   */
+  async upsertCustomLabel(label: { id: string; name: string; color: string }, userEmail?: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !label.id) return false;
+    try {
+      const { error } = await supabase.from('custom_labels').upsert({
+        id: label.id,
+        user_email: userEmail ? userEmail.toLowerCase().trim() : null,
+        name: label.name,
+        color: label.color || '#3b82f6',
+      }, { onConflict: 'id' });
+
+      if (error) {
+        console.warn('[SupabaseService] Error upserting custom label:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Exception upserting custom label:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Custom Labels: Delete a custom label in Supabase
+   */
+  async deleteCustomLabel(labelId: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !labelId) return false;
+    try {
+      const { error } = await supabase.from('custom_labels').delete().eq('id', labelId);
+      if (error) {
+        console.warn('[SupabaseService] Error deleting custom label:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Exception deleting custom label:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Subscribe to realtime database changes (boards, cards, columns, notifications, custom_labels)
+   */
+  subscribeToAll(userEmail: string, onBoardsChange: () => void, onNotifsChange: () => void, onLabelsChange?: () => void) {
     if (!isSupabaseConfigured()) return () => {};
 
     const cleanEmail = userEmail ? userEmail.toLowerCase().trim() : '';
@@ -934,6 +998,14 @@ export const supabaseService = {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'comments' },
         () => onBoardsChange()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'custom_labels' },
+        () => {
+          if (onLabelsChange) onLabelsChange();
+          else onBoardsChange();
+        }
       )
       .on(
         'postgres_changes',

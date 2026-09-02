@@ -24,6 +24,7 @@ import { useEmailStore } from './store/useEmailStore';
 import { useAuthStore } from './store/useAuthStore';
 import { useThemeStore } from './store/useThemeStore';
 import { useToastStore } from './store/useToastStore';
+import { useSettingsStore } from './store/useSettingsStore';
 import { supabaseService } from './services/supabaseService';
 import { formatDueDate, uid } from './utils';
 import type { MemberRole } from './types';
@@ -105,12 +106,13 @@ export default function App() {
     } catch {}
   }, []);
 
-  // Load cloud boards & notifications when user is logged in
+  // Load cloud boards, notifications & custom labels when user is logged in
   useEffect(() => {
     if (currentUser?.email) {
       const email = currentUser.email.toLowerCase().trim();
       loadBoardsFromCloud(email);
       loadNotificationsFromCloud(email);
+      useSettingsStore.getState().loadCustomLabelsFromCloud(email);
 
       // Auto-sync any existing local boards created by this user to Supabase
       const localBoards = useWorkStore.getState().boards;
@@ -143,6 +145,9 @@ export default function App() {
       },
       () => {
         loadNotificationsFromCloud(email);
+      },
+      () => {
+        useSettingsStore.getState().loadCustomLabelsFromCloud(email);
       }
     );
 

@@ -256,42 +256,42 @@ alter table public.comments enable row level security;
 alter table public.notifications enable row level security;
 alter table public.email_logs enable row level security;
 
--- Policies for Authenticated Users (Full CRUD for workspace collaborators)
-create policy "Authenticated access to profiles" on public.profiles
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+-- Policies for Workspace Collaborators & Public Anon Access
+create policy "Allow all access to profiles" on public.profiles
+  for all using (true) with check (true);
 
-create policy "Authenticated access to boards" on public.boards
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to boards" on public.boards
+  for all using (true) with check (true);
 
-create policy "Authenticated access to board_members" on public.board_members
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to board_members" on public.board_members
+  for all using (true) with check (true);
 
-create policy "Authenticated access to columns" on public.columns
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to columns" on public.columns
+  for all using (true) with check (true);
 
-create policy "Authenticated access to cards" on public.cards
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to cards" on public.cards
+  for all using (true) with check (true);
 
-create policy "Authenticated access to card_assignees" on public.card_assignees
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to card_assignees" on public.card_assignees
+  for all using (true) with check (true);
 
-create policy "Authenticated access to card_labels" on public.card_labels
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to card_labels" on public.card_labels
+  for all using (true) with check (true);
 
-create policy "Authenticated access to custom_labels" on public.custom_labels
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to custom_labels" on public.custom_labels
+  for all using (true) with check (true);
 
-create policy "Authenticated access to attachments" on public.attachments
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to attachments" on public.attachments
+  for all using (true) with check (true);
 
-create policy "Authenticated access to comments" on public.comments
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to comments" on public.comments
+  for all using (true) with check (true);
 
-create policy "Authenticated access to notifications" on public.notifications
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to notifications" on public.notifications
+  for all using (true) with check (true);
 
-create policy "Authenticated access to email_logs" on public.email_logs
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Allow all access to email_logs" on public.email_logs
+  for all using (true) with check (true);
 
 -- ==============================================================================
 -- 17. ENABLE REALTIME BROADCASTING

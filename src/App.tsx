@@ -113,18 +113,6 @@ export default function App() {
       loadBoardsFromCloud(email);
       loadNotificationsFromCloud(email);
       useSettingsStore.getState().loadCustomLabelsFromCloud(email);
-
-      // Auto-sync any existing local boards created by this user to Supabase
-      const localBoards = useWorkStore.getState().boards;
-      localBoards.forEach(b => {
-        if (!b.createdBy || b.createdBy.toLowerCase().trim() === email) {
-          const updatedBoard = {
-            ...b,
-            createdBy: email,
-          };
-          supabaseService.syncBoard(updatedBoard);
-        }
-      });
     }
   }, [currentUser?.email, loadBoardsFromCloud, loadNotificationsFromCloud]);
 

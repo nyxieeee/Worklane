@@ -119,11 +119,16 @@ export const AVATAR_COLORS = [
 ] as const;
 
 export const LABELS = [
-  { id: 'bug',      name: 'Bug',      color: '#ef4444' },
-  { id: 'feature',  name: 'Feature',  color: '#6366f1' },
+  { id: 'general',  name: 'General',  color: '#64748b' },
+  { id: 'task',     name: 'Task',     color: '#3b82f6' },
+  { id: 'planning', name: 'Planning', color: '#8b5cf6' },
+  { id: 'research', name: 'Research', color: '#06b6d4' },
+  { id: 'review',   name: 'Review',   color: '#f59e0b' },
+  { id: 'urgent',   name: 'Urgent',   color: '#ef4444' },
+  { id: 'done',     name: 'Done',     color: '#10b981' },
   { id: 'design',   name: 'Design',   color: '#ec4899' },
+  { id: 'feature',  name: 'Feature',  color: '#6366f1' },
+  { id: 'bug',      name: 'Bug',      color: '#dc2626' },
   { id: 'backend',  name: 'Backend',  color: '#f97316' },
   { id: 'frontend', name: 'Frontend', color: '#0ea5e9' },
-  { id: 'urgent',   name: 'Urgent',   color: '#f59e0b' },
-  { id: 'done',     name: 'Done',     color: '#10b981' },
 ] as const;

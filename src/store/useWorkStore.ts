@@ -402,16 +402,19 @@ export const useWorkStore = create<WorkState>()(
         let targetBoard: Board | undefined;
         set(s => {
           const tb = s.boards.find(b =>
-            b.columns?.some(col => col.cards?.some(c => c.id === cardId))
+            b.columns?.some(col => col.cards?.some(c => c.id === cardId)) ||
+            (b.inboxCards || []).some(c => c.id === cardId)
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
           if (!tb) return s;
 
           const updatedBoards = updateBoards(s.boards, tb.id, b => ({
             ...b,
-            columns: b.columns.map(col => ({
-              ...col, cards: (col.cards || []).filter(c => c.id !== cardId),
+            columns: (b.columns || []).map(col => ({
+              ...col,
+              cards: (col.cards || []).filter(c => c.id !== cardId),
             })),
+            inboxCards: (b.inboxCards || []).filter(c => c.id !== cardId),
           }));
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };

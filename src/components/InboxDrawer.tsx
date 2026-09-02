@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
   Inbox, Plus, X, Search, ChevronLeft,
-  MessageSquare, Paperclip, Calendar, Sparkles
+  MessageSquare, Paperclip, Calendar, Sparkles, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card as CardType, Board, LABELS } from '../types';
 import { useWorkStore } from '../store/useWorkStore';
+import { useToastStore } from '../store/useToastStore';
+import { useConfirmStore } from '../store/useConfirmStore';
 import { formatDueDate } from '../utils';
 
 interface Props {
@@ -34,8 +36,11 @@ export function InboxDrawer({
   const [isHoveredDrop, setIsHoveredDrop] = useState(false);
 
   const addInboxCard = useWorkStore(s => s.addInboxCard);
+  const deleteInboxCard = useWorkStore(s => s.deleteInboxCard);
   const moveColumnCardToInbox = useWorkStore(s => s.moveColumnCardToInbox);
   const moveInboxCardToColumn = useWorkStore(s => s.moveInboxCardToColumn);
+  const showToast = useToastStore(s => s.showToast);
+  const showConfirm = useConfirmStore(s => s.showConfirm);
 
   const inboxCards: CardType[] = board?.inboxCards || [];
 
@@ -53,6 +58,21 @@ export function InboxDrawer({
     if (!newTitle.trim() || !board) return;
     addInboxCard(newTitle.trim(), board.id);
     setNewTitle('');
+  };
+
+  const handleDeleteCard = (e: React.MouseEvent, card: CardType) => {
+    e.stopPropagation();
+    showConfirm({
+      title: `Delete "${card.title}"?`,
+      message: `Are you sure you want to permanently delete this concern from your Inbox? This action cannot be undone.`,
+      confirmText: 'Delete Concern',
+      variant: 'danger',
+      icon: 'trash',
+      onConfirm: () => {
+        deleteInboxCard(card.id);
+        showToast('Inbox concern deleted', 'info');
+      }
+    });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -432,31 +452,61 @@ export function InboxDrawer({
                       )}
                     </div>
 
-                    {/* Quick Move to column button */}
-                    {defaultTargetCol && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {/* Delete button */}
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveInboxCardToColumn(card.id, defaultTargetCol.id);
-                        }}
+                        onClick={(e) => handleDeleteCard(e, card)}
                         style={{
-                          background: 'hsl(var(--muted) / 0.4)',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: 6,
-                          padding: '2px 6px',
-                          fontSize: 10,
-                          fontWeight: 600,
+                          background: 'transparent',
+                          border: 'none',
                           color: 'hsl(var(--muted-foreground))',
                           cursor: 'pointer',
+                          padding: '3px 5px',
+                          borderRadius: 5,
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 3,
+                          justifyContent: 'center',
+                          transition: 'color 0.15s ease, background 0.15s ease',
                         }}
-                        title={`Move to ${defaultTargetCol.name}`}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = 'hsl(var(--destructive))';
+                          e.currentTarget.style.background = 'hsl(var(--destructive) / 0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = 'hsl(var(--muted-foreground))';
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                        title="Delete Concern"
                       >
-                        <span>→ {defaultTargetCol.name}</span>
+                        <Trash2 size={12} />
                       </button>
-                    )}
+
+                      {/* Quick Move to column button */}
+                      {defaultTargetCol && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveInboxCardToColumn(card.id, defaultTargetCol.id);
+                          }}
+                          style={{
+                            background: 'hsl(var(--muted) / 0.4)',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: 6,
+                            padding: '2px 6px',
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: 'hsl(var(--muted-foreground))',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 3,
+                          }}
+                          title={`Move to ${defaultTargetCol.name}`}
+                        >
+                          <span>→ {defaultTargetCol.name}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

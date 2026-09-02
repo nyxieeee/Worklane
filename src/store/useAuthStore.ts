@@ -28,6 +28,7 @@ interface AuthState {
   accounts: RegisteredAccount[];
   
   initializeAuth: () => Promise<void>;
+  updateUserProfile: (updates: { name?: string; avatarUrl?: string }) => Promise<{ success: boolean; error?: string }>;
   signUpWithEmail: (name: string, email: string, password: string) => Promise<{ success: boolean; requiresVerification?: boolean; error?: string }>;
   verifyEmailOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>;
   resendVerificationOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -64,24 +65,48 @@ export const useAuthStore = create<AuthState>()(
         if (!isSupabaseConfigured()) return;
         
         try {
-          const parseUser = (u: any): AuthUser => ({
-            id: u.id,
-            name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'User',
-            email: u.email || '',
-            avatarUrl: u.user_metadata?.avatar_url || u.user_metadata?.picture || u.identities?.[0]?.identity_data?.avatar_url || u.identities?.[0]?.identity_data?.picture,
-            provider: (u.app_metadata?.provider as any) || (u.user_metadata?.provider as any) || 'email',
-          });
+          const parseUser = (u: any): AuthUser => {
+            const customAvatar = u.user_metadata?.custom_avatar_url;
+            const fallbackAvatar = u.user_metadata?.avatar_url || u.user_metadata?.picture || u.identities?.[0]?.identity_data?.avatar_url || u.identities?.[0]?.identity_data?.picture;
+            return {
+              id: u.id,
+              name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'User',
+              email: u.email || '',
+              avatarUrl: customAvatar !== undefined ? (customAvatar || undefined) : fallbackAvatar,
+              provider: (u.app_metadata?.provider as any) || (u.user_metadata?.provider as any) || 'email',
+            };
+          };
 
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
             const parsed = parseUser(session.user);
+            // Fetch potential custom profile from Supabase profiles table
+            try {
+              const { data: prof } = await supabase.from('profiles').select('avatar_url, name').eq('id', session.user.id).maybeSingle();
+              if (prof?.avatar_url) {
+                parsed.avatarUrl = prof.avatar_url;
+              }
+              if (prof?.name) {
+                parsed.name = prof.name;
+              }
+            } catch {}
+
             set({ user: parsed, isAuthenticated: true });
             supabaseService.upsertProfile(parsed);
           }
 
-          supabase.auth.onAuthStateChange((_event, session) => {
+          supabase.auth.onAuthStateChange(async (_event, session) => {
             if (session?.user) {
               const parsed = parseUser(session.user);
+              try {
+                const { data: prof } = await supabase.from('profiles').select('avatar_url, name').eq('id', session.user.id).maybeSingle();
+                if (prof?.avatar_url) {
+                  parsed.avatarUrl = prof.avatar_url;
+                }
+                if (prof?.name) {
+                  parsed.name = prof.name;
+                }
+              } catch {}
               set({ user: parsed, isAuthenticated: true });
               supabaseService.upsertProfile(parsed);
             } else if (!session && isSupabaseConfigured()) {
@@ -91,6 +116,57 @@ export const useAuthStore = create<AuthState>()(
         } catch (err) {
           console.warn('[Supabase Auth] Init error:', err);
         }
+      },
+
+      updateUserProfile: async (updates: { name?: string; avatarUrl?: string }) => {
+        const { user, accounts } = get();
+        if (!user) return { success: false, error: 'Not authenticated' };
+
+        const newName = updates.name !== undefined ? updates.name.trim() : user.name;
+        const newAvatar = updates.avatarUrl !== undefined ? updates.avatarUrl : user.avatarUrl;
+
+        const updatedUser: AuthUser = {
+          ...user,
+          name: newName || 'User',
+          avatarUrl: newAvatar || undefined,
+        };
+
+        set({ user: updatedUser });
+
+        // 1. Sync across all active boards and cards in memory
+        try {
+          const { useWorkStore } = await import('./useWorkStore');
+          useWorkStore.getState().syncCurrentUserProfile(updatedUser);
+        } catch (e) {
+          console.warn('[updateUserProfile] workStore sync warning:', e);
+        }
+
+        // 2. Sync with Supabase (profiles table + auth metadata)
+        if (isSupabaseConfigured()) {
+          try {
+            await supabaseService.upsertProfile(updatedUser);
+            await supabase.auth.updateUser({
+              data: {
+                name: newName,
+                custom_avatar_url: newAvatar || '',
+                avatar_url: newAvatar || '',
+                picture: newAvatar || '',
+              },
+            });
+          } catch (err: any) {
+            console.warn('[Supabase Auth] UpdateProfile error:', err);
+          }
+        }
+
+        // 3. Update local accounts
+        const updatedAccounts = accounts.map(a =>
+          a.email.toLowerCase() === user.email.toLowerCase()
+            ? { ...a, name: newName, avatarUrl: newAvatar }
+            : a
+        );
+        set({ accounts: updatedAccounts });
+
+        return { success: true };
       },
 
       signUpWithEmail: async (name, email, password) => {
@@ -251,11 +327,19 @@ export const useAuthStore = create<AuthState>()(
 
             if (data.user) {
               const u = data.user;
+              let avatar = u.user_metadata?.custom_avatar_url || u.user_metadata?.avatar_url;
+              let name = u.user_metadata?.name || cleanEmail.split('@')[0];
+              try {
+                const { data: prof } = await supabase.from('profiles').select('avatar_url, name').eq('id', u.id).maybeSingle();
+                if (prof?.avatar_url) avatar = prof.avatar_url;
+                if (prof?.name) name = prof.name;
+              } catch {}
+
               const authUser: AuthUser = {
                 id: u.id,
-                name: u.user_metadata?.name || cleanEmail.split('@')[0],
+                name,
                 email: cleanEmail,
-                avatarUrl: u.user_metadata?.avatar_url,
+                avatarUrl: avatar,
                 provider: 'email',
               };
               set({ user: authUser, isAuthenticated: true });

@@ -146,10 +146,10 @@ export default function App() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'appearance' | 'notifications' | 'email' | 'privacy' | 'labels'>('appearance');
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'appearance' | 'notifications' | 'email' | 'privacy' | 'labels'>('profile');
   const [notifOpen, setNotifOpen] = useState(false);
 
-  const handleOpenSettings = useCallback((tab: 'appearance' | 'notifications' | 'email' | 'privacy' | 'labels' = 'appearance') => {
+  const handleOpenSettings = useCallback((tab: 'profile' | 'appearance' | 'notifications' | 'email' | 'privacy' | 'labels' = 'profile') => {
     setSettingsTab(tab);
     setShowSettings(true);
   }, []);

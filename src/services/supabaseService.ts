@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { Board, Column, Card, Comment, Attachment, Member, MemberRole, Notification } from '../types';
+import { uid } from '../utils';
 
 /**
  * Service to interact with Supabase database, storage, and notifications
@@ -13,20 +14,37 @@ export const supabaseService = {
   },
 
   /**
-   * Upsert current user profile (with Google avatar URL & name)
+   * Upsert current user profile (with avatar URL & name), and propagate to board_members
    */
-  async upsertProfile(user: { id: string; name?: string; email: string; avatarUrl?: string }): Promise<void> {
-    if (!isSupabaseConfigured() || !user?.email) return;
+  async upsertProfile(user: { id?: string; name?: string; email: string; avatarUrl?: string }): Promise<boolean> {
+    if (!isSupabaseConfigured() || !user?.email) return false;
     try {
-      await supabase.from('profiles').upsert({
-        id: user.id,
-        name: user.name || user.email.split('@')[0],
-        email: user.email.toLowerCase().trim(),
+      const cleanEmail = user.email.toLowerCase().trim();
+      const profileRow: any = {
+        name: user.name || cleanEmail.split('@')[0],
+        email: cleanEmail,
         avatar_url: user.avatarUrl || null,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' });
+      };
+      if (user.id) profileRow.id = user.id;
+
+      const { error } = await supabase.from('profiles').upsert(profileRow, { onConflict: 'email' });
+      if (error) {
+        console.warn('[SupabaseService] Upsert profile warning:', error);
+      }
+
+      // Also propagate avatar_url across all board_members records for this user
+      if (user.avatarUrl || user.name) {
+        const updates: any = {};
+        if (user.avatarUrl) updates.avatar_url = user.avatarUrl;
+        if (user.name) updates.name = user.name;
+        await supabase.from('board_members').update(updates).ilike('email', cleanEmail);
+      }
+
+      return true;
     } catch (err) {
       console.warn('[SupabaseService] Error upserting profile:', err);
+      return false;
     }
   },
 
@@ -185,7 +203,7 @@ export const supabaseService = {
           };
         };
 
-        const bColumns: Column[] = allCols
+        let bColumns: Column[] = allCols
           .filter(c => c.board_id === b.id)
           .map(col => {
             const colCards: Card[] = allCards
@@ -198,6 +216,16 @@ export const supabaseService = {
               cards: colCards,
             };
           });
+
+        if (bColumns.length === 0) {
+          bColumns = [
+            { id: uid(), name: 'Urgent',      cards: [] },
+            { id: uid(), name: 'To Do',       cards: [] },
+            { id: uid(), name: 'In Progress', cards: [] },
+            { id: uid(), name: 'Review',      cards: [] },
+            { id: uid(), name: 'Done',        cards: [] },
+          ];
+        }
 
         const bInboxCards: Card[] = allCards
           .filter(card => card.board_id === b.id && card.is_inbox)
@@ -258,17 +286,17 @@ export const supabaseService = {
       }
 
       // Clean up removed members
-      const currentMemberIds = (board.members || []).map(m => m.id);
+      const currentMemberIds = (board.members || []).map(m => m.id).filter(Boolean);
       if (currentMemberIds.length > 0) {
         await supabase
           .from('board_members')
           .delete()
           .eq('board_id', board.id)
-          .not('id', 'in', `(${currentMemberIds.map(id => `"${id}"`).join(',')})`);
+          .not('id', 'in', `(${currentMemberIds.join(',')})`);
       }
 
       // 3. Upsert Columns
-      const currentColIds = (board.columns || []).map(c => c.id);
+      const currentColIds = (board.columns || []).map(c => c.id).filter(Boolean);
       if (board.columns?.length > 0) {
         const colRows = board.columns.map((c, idx) => ({
           id: c.id,
@@ -283,7 +311,7 @@ export const supabaseService = {
           .from('columns')
           .delete()
           .eq('board_id', board.id)
-          .not('id', 'in', `(${currentColIds.map(id => `"${id}"`).join(',')})`);
+          .not('id', 'in', `(${currentColIds.join(',')})`);
       }
 
       // 4. Upsert Cards (both regular column cards and inbox cards)
@@ -309,8 +337,9 @@ export const supabaseService = {
         }, { onConflict: 'id' });
 
         // Card Assignees
-        if (card.assignees && card.assignees.length > 0) {
-          const assRows = card.assignees.map(mId => ({
+        const validAssigneeIds = (card.assignees || []).filter(Boolean);
+        if (validAssigneeIds.length > 0) {
+          const assRows = validAssigneeIds.map(mId => ({
             card_id: card.id,
             member_id: mId,
           }));
@@ -319,14 +348,15 @@ export const supabaseService = {
             .from('card_assignees')
             .delete()
             .eq('card_id', card.id)
-            .not('member_id', 'in', `(${card.assignees.map(id => `"${id}"`).join(',')})`);
+            .not('member_id', 'in', `(${validAssigneeIds.join(',')})`);
         } else {
           await supabase.from('card_assignees').delete().eq('card_id', card.id);
         }
 
         // Card Labels
-        if (card.labels && card.labels.length > 0) {
-          const lblRows = card.labels.map(lId => ({
+        const validLabelIds = (card.labels || []).filter(Boolean);
+        if (validLabelIds.length > 0) {
+          const lblRows = validLabelIds.map(lId => ({
             card_id: card.id,
             label_id: lId,
           }));
@@ -335,12 +365,12 @@ export const supabaseService = {
             .from('card_labels')
             .delete()
             .eq('card_id', card.id)
-            .not('label_id', 'in', `(${card.labels.map(id => `"${id}"`).join(',')})`);
+            .not('label_id', 'in', `(${validLabelIds.join(',')})`);
         } else {
           await supabase.from('card_labels').delete().eq('card_id', card.id);
         }
 
-        // Card Comments
+        // Card Comments & Replies
         if (card.comments?.length) {
           const cmRows = card.comments.map(cm => ({
             id: cm.id,
@@ -348,12 +378,18 @@ export const supabaseService = {
             parent_id: cm.parentId || null,
             reply_to_author: cm.replyToAuthor || null,
             author: cm.author,
-            author_initials: cm.authorInitials,
-            avatar_color: cm.avatarColor,
+            author_initials: cm.authorInitials || 'U',
+            avatar_color: cm.avatarColor || '#6366f1',
             text: cm.text,
-            created_at: cm.createdAt,
+            created_at: cm.createdAt || new Date().toISOString(),
           }));
           await supabase.from('comments').upsert(cmRows, { onConflict: 'id' });
+          const currentCmIds = card.comments.map(c => c.id).filter(Boolean);
+          if (currentCmIds.length > 0) {
+            await supabase.from('comments').delete().eq('card_id', card.id).not('id', 'in', `(${currentCmIds.join(',')})`);
+          }
+        } else {
+          await supabase.from('comments').delete().eq('card_id', card.id);
         }
 
         // Card Attachments
@@ -362,12 +398,18 @@ export const supabaseService = {
             id: att.id,
             card_id: card.id,
             name: att.name,
-            size: att.size,
-            type: att.type,
-            data_url: att.dataUrl,
-            added_at: att.addedAt,
+            size: att.size || 0,
+            type: att.type || 'application/octet-stream',
+            data_url: att.dataUrl || '',
+            added_at: att.addedAt || new Date().toISOString(),
           }));
           await supabase.from('attachments').upsert(attRows, { onConflict: 'id' });
+          const currentAttIds = card.attachments.map(a => a.id).filter(Boolean);
+          if (currentAttIds.length > 0) {
+            await supabase.from('attachments').delete().eq('card_id', card.id).not('id', 'in', `(${currentAttIds.join(',')})`);
+          }
+        } else {
+          await supabase.from('attachments').delete().eq('card_id', card.id);
         }
       };
 
@@ -392,7 +434,7 @@ export const supabaseService = {
           .from('cards')
           .delete()
           .eq('board_id', board.id)
-          .not('id', 'in', `(${currentCardIds.map(id => `"${id}"`).join(',')})`);
+          .not('id', 'in', `(${currentCardIds.join(',')})`);
       } else if (board.columns?.length > 0 || board.inboxCards?.length) {
         await supabase.from('cards').delete().eq('board_id', board.id);
       }

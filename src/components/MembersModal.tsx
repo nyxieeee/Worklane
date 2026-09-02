@@ -32,12 +32,12 @@ interface RegisteredUser {
 const OWNER_ROLE_OPTIONS: SelectOption<AssignableRole>[] = [
   { value: 'admin', label: 'Admin', subLabel: 'Full board management', icon: <Shield size={13} />, color: 'hsl(var(--primary))' },
   { value: 'member', label: 'Member', subLabel: 'Active team member', icon: <User size={13} />, color: 'hsl(var(--foreground))' },
-  { value: 'observer', label: 'Observer', subLabel: 'Intern / Architecture study', icon: <Eye size={13} />, color: '#f59e0b' },
+  { value: 'observer', label: 'Observer', subLabel: 'View-only access', icon: <Eye size={13} />, color: '#f59e0b' },
 ];
 
 const ADMIN_ROLE_OPTIONS: SelectOption<AssignableRole>[] = [
   { value: 'member', label: 'Member', subLabel: 'Active team member', icon: <User size={13} />, color: 'hsl(var(--foreground))' },
-  { value: 'observer', label: 'Observer', subLabel: 'Intern / Architecture study', icon: <Eye size={13} />, color: '#f59e0b' },
+  { value: 'observer', label: 'Observer', subLabel: 'View-only access', icon: <Eye size={13} />, color: '#f59e0b' },
 ];
 
 export default function MembersModal({ onClose }: Props) {
@@ -824,7 +824,7 @@ export default function MembersModal({ onClose }: Props) {
                     <strong style={{ color: 'hsl(var(--foreground))' }}>Member:</strong> Complete assigned cards, edit details, and post comments.
                   </li>
                   <li>
-                    <strong style={{ color: 'hsl(var(--foreground))' }}>Observer:</strong> Read-only intern mode — study architecture, view task guides, and reply to comments.
+                    <strong style={{ color: 'hsl(var(--foreground))' }}>Observer:</strong> Read-only view mode — view board progress, check task details, and post comments.
                   </li>
                 </ul>
               </div>

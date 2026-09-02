@@ -290,7 +290,7 @@ export default function Topbar({
                           </span>
                         ) : board.members?.find(m => m.email && m.email.toLowerCase().trim() === user?.email?.toLowerCase().trim())?.role === 'observer' ? (
                           <span style={{ color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <Eye size={11} /> Observer (Intern)
+                            <Eye size={11} /> Observer (View Only)
                           </span>
                         ) : (
                           <span style={{ color: 'hsl(var(--muted-foreground))', display: 'inline-flex', alignItems: 'center', gap: 4 }}>

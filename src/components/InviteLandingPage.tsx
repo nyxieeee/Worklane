@@ -200,11 +200,11 @@ export default function InviteLandingPage({ boardId, role = 'member', onAcceptJo
       desc: 'You can complete assigned cards, edit details, move tasks, and post comments.',
     },
     observer: {
-      label: 'Observer (Intern Study Mode)',
+      label: 'Observer (View Only)',
       badgeColor: '#f59e0b',
       badgeBg: 'rgba(245, 158, 11, 0.15)',
       icon: <Eye size={16} />,
-      desc: 'Read-only intern mode — study system architecture, view task guides, and reply to comments.',
+      desc: 'Read-only access — view board progress, check task details, and post comments.',
     },
   };
 

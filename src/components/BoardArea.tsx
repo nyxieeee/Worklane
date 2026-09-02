@@ -244,7 +244,7 @@ export default function BoardArea({
               }}
             >
               <Eye size={13} />
-              <span>Observer Mode (Architecture Study)</span>
+              <span>Observer Mode (View Only)</span>
             </div>
           )}
         </div>

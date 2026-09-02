@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import type { Board, Column, Card, Comment, Attachment, Member, Notification } from '../types';
+import type { Board, Column, Card, Comment, Attachment, Member, MemberRole, Notification } from '../types';
 
 /**
  * Service to interact with Supabase database, storage, and notifications
@@ -122,61 +122,67 @@ export const supabaseService = {
               email: m.email,
               color: m.color || '#6366f1',
               avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
+              role: (m.role as MemberRole) || 'member',
             };
           });
+
+        const mapDbCardToCard = (card: any): Card => {
+          const cardAssigneeIds = allAssignees
+            .filter(a => a.card_id === card.id)
+            .map(a => a.member_id);
+
+          const cardLabelIds = allLabels
+            .filter(l => l.card_id === card.id)
+            .map(l => l.label_id);
+
+          const cardComments: Comment[] = allComments
+            .filter(cm => cm.card_id === card.id)
+            .map(cm => ({
+              id: cm.id,
+              author: cm.author,
+              authorInitials: cm.author_initials,
+              avatarColor: cm.avatar_color,
+              text: cm.text,
+              createdAt: cm.created_at,
+              parentId: cm.parent_id || null,
+              replyToAuthor: cm.reply_to_author || null,
+            }));
+
+          const cardAtts: Attachment[] = allAttachments
+            .filter(att => att.card_id === card.id)
+            .map(att => ({
+              id: att.id,
+              name: att.name,
+              size: att.size,
+              type: att.type,
+              dataUrl: att.data_url || '',
+              addedAt: att.added_at,
+            }));
+
+          return {
+            id: card.id,
+            title: card.title,
+            description: card.description || '',
+            priority: card.priority,
+            completed: card.completed,
+            completedAt: card.completed_at,
+            dueDate: card.due_date,
+            coverAttachmentId: card.cover_attachment_id,
+            createdAt: card.created_at,
+            isInbox: !!card.is_inbox,
+            assignees: cardAssigneeIds,
+            labels: cardLabelIds,
+            comments: cardComments,
+            attachments: cardAtts,
+          };
+        };
 
         const bColumns: Column[] = allCols
           .filter(c => c.board_id === b.id)
           .map(col => {
             const colCards: Card[] = allCards
-              .filter(card => card.column_id === col.id)
-              .map(card => {
-                const cardAssigneeIds = allAssignees
-                  .filter(a => a.card_id === card.id)
-                  .map(a => a.member_id);
-
-                const cardLabelIds = allLabels
-                  .filter(l => l.card_id === card.id)
-                  .map(l => l.label_id);
-
-                const cardComments: Comment[] = allComments
-                  .filter(cm => cm.card_id === card.id)
-                  .map(cm => ({
-                    id: cm.id,
-                    author: cm.author,
-                    authorInitials: cm.author_initials,
-                    avatarColor: cm.avatar_color,
-                    text: cm.text,
-                    createdAt: cm.created_at,
-                  }));
-
-                const cardAtts: Attachment[] = allAttachments
-                  .filter(att => att.card_id === card.id)
-                  .map(att => ({
-                    id: att.id,
-                    name: att.name,
-                    size: att.size,
-                    type: att.type,
-                    dataUrl: att.data_url || '',
-                    addedAt: att.added_at,
-                  }));
-
-                return {
-                  id: card.id,
-                  title: card.title,
-                  description: card.description || '',
-                  priority: card.priority,
-                  completed: card.completed,
-                  completedAt: card.completed_at,
-                  dueDate: card.due_date,
-                  coverAttachmentId: card.cover_attachment_id,
-                  createdAt: card.created_at,
-                  assignees: cardAssigneeIds,
-                  labels: cardLabelIds,
-                  comments: cardComments,
-                  attachments: cardAtts,
-                };
-              });
+              .filter(card => card.column_id === col.id && !card.is_inbox)
+              .map(mapDbCardToCard);
 
             return {
               id: col.id,
@@ -185,6 +191,10 @@ export const supabaseService = {
             };
           });
 
+        const bInboxCards: Card[] = allCards
+          .filter(card => card.board_id === b.id && card.is_inbox)
+          .map(mapDbCardToCard);
+
         return {
           id: b.id,
           name: b.name,
@@ -192,6 +202,7 @@ export const supabaseService = {
           createdBy: b.created_by,
           members: bMembers,
           columns: bColumns,
+          inboxCards: bInboxCards,
         };
       });
 
@@ -232,6 +243,7 @@ export const supabaseService = {
           email: m.email.toLowerCase().trim(),
           color: m.color,
           avatar_url: m.avatarUrl || null,
+          role: m.role || 'member',
         }));
         const { error: mErr } = await supabase.from('board_members').upsert(memberRows, { onConflict: 'board_id,email' });
         if (mErr) console.warn('[SupabaseService] Member upsert warning:', mErr);
@@ -266,89 +278,103 @@ export const supabaseService = {
           .not('id', 'in', `(${currentColIds.map(id => `"${id}"`).join(',')})`);
       }
 
-      // 4. Upsert Cards
+      // 4. Upsert Cards (both regular column cards and inbox cards)
       const currentCardIds: string[] = [];
+
+      const syncSingleCard = async (card: Card, columnId: string | null, position: number, isInbox: boolean) => {
+        currentCardIds.push(card.id);
+
+        await supabase.from('cards').upsert({
+          id: card.id,
+          board_id: board.id,
+          column_id: columnId,
+          title: card.title,
+          description: card.description || '',
+          priority: card.priority || 'medium',
+          completed: !!card.completed,
+          completed_at: card.completedAt || null,
+          due_date: card.dueDate || null,
+          cover_attachment_id: card.coverAttachmentId || null,
+          position,
+          is_inbox: isInbox,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+
+        // Card Assignees
+        if (card.assignees && card.assignees.length > 0) {
+          const assRows = card.assignees.map(mId => ({
+            card_id: card.id,
+            member_id: mId,
+          }));
+          await supabase.from('card_assignees').upsert(assRows, { onConflict: 'card_id,member_id' });
+          await supabase
+            .from('card_assignees')
+            .delete()
+            .eq('card_id', card.id)
+            .not('member_id', 'in', `(${card.assignees.map(id => `"${id}"`).join(',')})`);
+        } else {
+          await supabase.from('card_assignees').delete().eq('card_id', card.id);
+        }
+
+        // Card Labels
+        if (card.labels && card.labels.length > 0) {
+          const lblRows = card.labels.map(lId => ({
+            card_id: card.id,
+            label_id: lId,
+          }));
+          await supabase.from('card_labels').upsert(lblRows, { onConflict: 'card_id,label_id' });
+          await supabase
+            .from('card_labels')
+            .delete()
+            .eq('card_id', card.id)
+            .not('label_id', 'in', `(${card.labels.map(id => `"${id}"`).join(',')})`);
+        } else {
+          await supabase.from('card_labels').delete().eq('card_id', card.id);
+        }
+
+        // Card Comments
+        if (card.comments?.length) {
+          const cmRows = card.comments.map(cm => ({
+            id: cm.id,
+            card_id: card.id,
+            parent_id: cm.parentId || null,
+            reply_to_author: cm.replyToAuthor || null,
+            author: cm.author,
+            author_initials: cm.authorInitials,
+            avatar_color: cm.avatarColor,
+            text: cm.text,
+            created_at: cm.createdAt,
+          }));
+          await supabase.from('comments').upsert(cmRows, { onConflict: 'id' });
+        }
+
+        // Card Attachments
+        if (card.attachments?.length) {
+          const attRows = card.attachments.map(att => ({
+            id: att.id,
+            card_id: card.id,
+            name: att.name,
+            size: att.size,
+            type: att.type,
+            data_url: att.dataUrl,
+            added_at: att.addedAt,
+          }));
+          await supabase.from('attachments').upsert(attRows, { onConflict: 'id' });
+        }
+      };
+
+      // Sync Column Cards
       for (const col of board.columns || []) {
         if (!col.cards?.length) continue;
-
         for (let cIdx = 0; cIdx < col.cards.length; cIdx++) {
-          const card = col.cards[cIdx];
-          currentCardIds.push(card.id);
+          await syncSingleCard(col.cards[cIdx], col.id, cIdx, false);
+        }
+      }
 
-          await supabase.from('cards').upsert({
-            id: card.id,
-            board_id: board.id,
-            column_id: col.id,
-            title: card.title,
-            description: card.description || '',
-            priority: card.priority || 'medium',
-            completed: !!card.completed,
-            completed_at: card.completedAt || null,
-            due_date: card.dueDate || null,
-            cover_attachment_id: card.coverAttachmentId || null,
-            position: cIdx,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
-
-          // Card Assignees
-          if (card.assignees && card.assignees.length > 0) {
-            const assRows = card.assignees.map(mId => ({
-              card_id: card.id,
-              member_id: mId,
-            }));
-            await supabase.from('card_assignees').upsert(assRows, { onConflict: 'card_id,member_id' });
-            await supabase
-              .from('card_assignees')
-              .delete()
-              .eq('card_id', card.id)
-              .not('member_id', 'in', `(${card.assignees.map(id => `"${id}"`).join(',')})`);
-          } else {
-            await supabase.from('card_assignees').delete().eq('card_id', card.id);
-          }
-
-          // Card Labels
-          if (card.labels && card.labels.length > 0) {
-            const lblRows = card.labels.map(lId => ({
-              card_id: card.id,
-              label_id: lId,
-            }));
-            await supabase.from('card_labels').upsert(lblRows, { onConflict: 'card_id,label_id' });
-            await supabase
-              .from('card_labels')
-              .delete()
-              .eq('card_id', card.id)
-              .not('label_id', 'in', `(${card.labels.map(id => `"${id}"`).join(',')})`);
-          } else {
-            await supabase.from('card_labels').delete().eq('card_id', card.id);
-          }
-
-          // Card Comments
-          if (card.comments?.length) {
-            const cmRows = card.comments.map(cm => ({
-              id: cm.id,
-              card_id: card.id,
-              author: cm.author,
-              author_initials: cm.authorInitials,
-              avatar_color: cm.avatarColor,
-              text: cm.text,
-              created_at: cm.createdAt,
-            }));
-            await supabase.from('comments').upsert(cmRows, { onConflict: 'id' });
-          }
-
-          // Card Attachments
-          if (card.attachments?.length) {
-            const attRows = card.attachments.map(att => ({
-              id: att.id,
-              card_id: card.id,
-              name: att.name,
-              size: att.size,
-              type: att.type,
-              data_url: att.dataUrl,
-              added_at: att.addedAt,
-            }));
-            await supabase.from('attachments').upsert(attRows, { onConflict: 'id' });
-          }
+      // Sync Inbox Cards
+      if (board.inboxCards?.length) {
+        for (let iIdx = 0; iIdx < board.inboxCards.length; iIdx++) {
+          await syncSingleCard(board.inboxCards[iIdx], null, iIdx, true);
         }
       }
 
@@ -359,7 +385,7 @@ export const supabaseService = {
           .delete()
           .eq('board_id', board.id)
           .not('id', 'in', `(${currentCardIds.map(id => `"${id}"`).join(',')})`);
-      } else if (board.columns?.length > 0) {
+      } else if (board.columns?.length > 0 || board.inboxCards?.length) {
         await supabase.from('cards').delete().eq('board_id', board.id);
       }
 
@@ -404,6 +430,25 @@ export const supabaseService = {
       return true;
     } catch (err) {
       console.error('[SupabaseService] Exception adding member directly:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Update member role in Supabase
+   */
+  async updateMemberRole(boardId: string, memberId: string, role: MemberRole): Promise<boolean> {
+    if (!isSupabaseConfigured() || !boardId || !memberId) return false;
+    try {
+      const { error } = await supabase
+        .from('board_members')
+        .update({ role })
+        .eq('board_id', boardId)
+        .eq('id', memberId);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Error updating member role:', err);
       return false;
     }
   },

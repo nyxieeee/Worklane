@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   AlignLeft, Paperclip, MessageSquare, Calendar, Tag, Users,
   Trash2, CheckSquare, Square, Download, X, Send, Plus, Check,
-  Eye, Image as ImageIcon, Maximize2, AtSign
+  Eye, Image as ImageIcon, Maximize2, AtSign, Reply, Sparkles,
+  FileSpreadsheet, FileText, FileCode, FileArchive, File
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -10,7 +11,7 @@ import { useToastStore } from '../store/useToastStore';
 import { useConfirmStore } from '../store/useConfirmStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { LABELS, type Attachment } from '../types';
+import { LABELS, type Attachment, type Comment } from '../types';
 import { avatarInitials, formatBytes, formatTime, uid, truncateFileName } from '../utils';
 import NeumorphicDatePicker from './ui/NeumorphicDatePicker';
 
@@ -18,6 +19,29 @@ interface Props {
   cardId: string | null;
   boardId: string | null;
   onClose: () => void;
+}
+
+function getFileTypeInfo(fileName: string, type: string) {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  if (['xlsx', 'xls', 'csv'].includes(ext)) {
+    return { tag: 'XLSX', color: '#10b981', bg: '#10b9811c', icon: FileSpreadsheet };
+  }
+  if (['pdf'].includes(ext)) {
+    return { tag: 'PDF', color: '#ef4444', bg: '#ef44441c', icon: FileText };
+  }
+  if (['doc', 'docx', 'txt', 'rtf', 'md'].includes(ext)) {
+    return { tag: 'DOC', color: '#3b82f6', bg: '#3b82f61c', icon: FileText };
+  }
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
+    return { tag: 'ZIP', color: '#f59e0b', bg: '#f59e0b1c', icon: FileArchive };
+  }
+  if (['js', 'ts', 'tsx', 'jsx', 'py', 'json', 'html', 'css', 'sql'].includes(ext)) {
+    return { tag: ext.toUpperCase(), color: '#06b6d4', bg: '#06b6d41c', icon: FileCode };
+  }
+  if (type.startsWith('image/')) {
+    return { tag: 'IMG', color: '#ec4899', bg: '#ec48991c', icon: ImageIcon };
+  }
+  return { tag: ext.toUpperCase() || 'FILE', color: '#6366f1', bg: '#6366f11c', icon: File };
 }
 
 export default function CardModal({ cardId, boardId, onClose }: Props) {
@@ -34,8 +58,10 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const showConfirm = useConfirmStore(s => s.showConfirm);
   const customLabels = useSettingsStore(s => s.customLabels);
   const addCustomLabel = useSettingsStore(s => s.addLabel);
+  const currentUser = useAuthStore(s => s.user);
 
   const [commentText, setCommentText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const [newLabelName, setNewLabelName] = useState('');
   const [newLabelColor] = useState('#3b82f6');
   const [showNewLabel, setShowNewLabel] = useState(false);
@@ -51,24 +77,39 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
     if (!cardId) return null;
     let targetBoard = boardId ? boards.find(b => b.id === boardId) : null;
     if (!targetBoard) {
-      targetBoard = boards.find(b => b.columns?.some(c => c.cards?.some(card => card.id === cardId))) || null;
+      targetBoard = boards.find(b =>
+        b.columns?.some(c => c.cards?.some(card => card.id === cardId)) ||
+        (b.inboxCards || []).some(card => card.id === cardId)
+      ) || null;
     }
     if (!targetBoard) return null;
 
     for (const column of targetBoard.columns || []) {
       const card = column.cards?.find(c => c.id === cardId);
       if (card) {
-        return { card, column, board: targetBoard };
+        return { card, column, board: targetBoard, isInbox: false };
       }
     }
+
+    const inboxCard = (targetBoard.inboxCards || []).find(c => c.id === cardId);
+    if (inboxCard) {
+      return { card: inboxCard, column: null, board: targetBoard, isInbox: true };
+    }
+
     return null;
   }, [boards, cardId, boardId]);
 
   if (!cardId || !result) return null;
 
-  const { card, column, board } = result;
+  const { card, column, board, isInbox } = result;
   const members = board.members || [];
   const allLabels = [...LABELS, ...customLabels];
+
+  const currentEmail = currentUser?.email?.toLowerCase().trim();
+  const isOwner = !!(board.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail);
+  const currentMemberObj = members.find(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
+  const isAdmin = !isOwner && currentMemberObj?.role === 'admin';
+  const canAssign = isOwner || isAdmin || !board.createdBy;
 
   // ── Local title state ──
   const [localTitle, setLocalTitle] = useState(card.title);
@@ -128,7 +169,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
     });
 
     if (addedCount > 0) {
-      showToast(`Added ${addedCount} attachment(s)`, 'success');
+      showToast(`Added ${addedCount} guide / attachment(s)`, 'success');
     }
     e.target.value = '';
   };
@@ -136,8 +177,9 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const handlePostComment = () => {
     const text = commentText.trim();
     if (!text) return;
-    addComment(cardId, text);
+    addComment(cardId, text, replyingTo?.id || null, replyingTo?.author || null);
     setCommentText('');
+    setReplyingTo(null);
     setShowMentionMenu(false);
     showToast('Comment posted', 'success');
   };
@@ -393,7 +435,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-              in column: {column.name}
+              in column: {column?.name || 'Inbox'}
             </span>
           </div>
           {!coverAttachment && (
@@ -434,26 +476,58 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
               />
             </div>
 
-            {/* Attachments */}
-            <div className="form-group">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Paperclip size={13} /> Attachments ({card.attachments?.length || 0})
-                </label>
+            {/* Task Guides & Attachments (Prominently Highlighted) */}
+            <div
+              className="form-group"
+              style={{
+                background: (card.attachments?.length > 0) ? 'hsl(var(--primary) / 0.04)' : 'transparent',
+                border: (card.attachments?.length > 0) ? '1.5px solid hsl(var(--primary) / 0.35)' : '1px solid hsl(var(--border) / 0.6)',
+                borderRadius: 14,
+                padding: '14px 16px',
+                boxShadow: (card.attachments?.length > 0) ? '0 4px 16px -4px hsl(var(--primary) / 0.12)' : 'none',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: (card.attachments?.length > 0) ? 12 : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label className="field-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6, color: 'hsl(var(--foreground))', fontWeight: 700 }}>
+                    <Paperclip size={14} color="hsl(var(--primary))" /> Task Guides & Attachments ({card.attachments?.length || 0})
+                  </label>
+                  {card.attachments?.length > 0 && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        background: 'hsl(var(--primary) / 0.15)',
+                        color: 'hsl(var(--primary))',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 3,
+                      }}
+                    >
+                      <Sparkles size={10} /> Essential Guide
+                    </span>
+                  )}
+                </div>
+
                 <label
-                  className="btn btn-secondary"
-                  style={{ fontSize: 11.5, padding: '3px 8px', cursor: 'pointer' }}
+                  className="btn btn-primary"
+                  style={{ fontSize: 11.5, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                 >
-                  <Plus size={12} /> Add File
+                  <Plus size={13} /> Add Guide / File
                   <input type="file" multiple style={{ display: 'none' }} onChange={handleFileUpload} />
                 </label>
               </div>
 
-              {card.attachments?.length > 0 && (
+              {card.attachments?.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {card.attachments.map(att => {
                     const isImg = isImageAttachment(att);
                     const isCover = card.coverAttachmentId === att.id || (!card.coverAttachmentId && isImg && coverAttachment?.id === att.id);
+                    const fileInfo = getFileTypeInfo(att.name, att.type);
+                    const FileIcon = fileInfo.icon;
 
                     return (
                       <div
@@ -462,13 +536,15 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 12,
-                          padding: '10px 12px',
-                          borderRadius: 'var(--radius)',
+                          padding: '10px 14px',
+                          borderRadius: 10,
                           boxShadow: 'var(--neu-shadow-raised-sm)',
-                          backgroundColor: 'hsl(var(--card))'
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          transition: 'border-color 0.15s ease',
                         }}
                       >
-                        {/* Thumbnail or File Badge */}
+                        {/* Thumbnail or File Type Badge */}
                         {isImg ? (
                           <div
                             style={{
@@ -479,7 +555,8 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                               backgroundColor: 'hsl(var(--secondary))',
                               cursor: 'pointer',
                               flexShrink: 0,
-                              boxShadow: 'var(--neu-shadow-raised-sm)'
+                              boxShadow: 'var(--neu-shadow-raised-sm)',
+                              border: '1px solid hsl(var(--border) / 0.8)',
                             }}
                             onClick={() => setPreviewAttachment(att)}
                             title="Click to preview full image"
@@ -493,22 +570,23 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                         ) : (
                           <div
                             style={{
-                              width: 46,
-                              height: 46,
+                              width: 48,
+                              height: 48,
                               borderRadius: 8,
-                              backgroundColor: 'hsl(var(--secondary))',
-                              boxShadow: 'var(--neu-shadow-raised-sm)',
+                              backgroundColor: fileInfo.bg,
+                              color: fileInfo.color,
+                              border: `1px solid ${fileInfo.color}33`,
                               display: 'flex',
                               flexDirection: 'column',
                               alignItems: 'center',
                               justifyContent: 'center',
                               flexShrink: 0,
-                              color: 'hsl(var(--muted-foreground))'
+                              gap: 2,
                             }}
                           >
-                            <Paperclip size={16} />
-                            <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase' }}>
-                              {att.name.split('.').pop()?.slice(0, 4) || 'FILE'}
+                            <FileIcon size={18} />
+                            <span style={{ fontSize: 8.5, fontWeight: 800, textTransform: 'uppercase' }}>
+                              {fileInfo.tag}
                             </span>
                           </div>
                         )}
@@ -517,8 +595,8 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                         <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <span
                             style={{
-                              fontSize: 12.5,
-                              fontWeight: 600,
+                              fontSize: 13,
+                              fontWeight: 700,
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
@@ -528,10 +606,10 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                             title={att.name}
                             onClick={() => isImg && setPreviewAttachment(att)}
                           >
-                            {truncateFileName(att.name, 32)}
+                            {truncateFileName(att.name, 36)}
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>
-                            <span>{formatBytes(att.size)}</span>
+                            <span style={{ fontWeight: 600 }}>{formatBytes(att.size)}</span>
                             <span>•</span>
                             <span>{new Date(att.addedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
                             {isCover && (
@@ -542,43 +620,54 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                           </div>
                         </div>
 
-                        {/* Action buttons */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {/* Action buttons with prominent Download */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           {isImg && (
                             <>
                               <motion.button
                                 whileTap={{ scale: 0.92 }}
                                 className="icon-btn"
-                                style={{ width: 26, height: 26 }}
+                                style={{ width: 30, height: 30 }}
                                 onClick={() => setPreviewAttachment(att)}
                                 title="Preview Image"
                               >
-                                <Eye size={13} />
+                                <Eye size={14} />
                               </motion.button>
                               <motion.button
                                 whileTap={{ scale: 0.92 }}
                                 className="icon-btn"
-                                style={{ width: 26, height: 26, color: isCover ? 'hsl(var(--primary))' : undefined }}
+                                style={{ width: 30, height: 30, color: isCover ? 'hsl(var(--primary))' : undefined }}
                                 onClick={() => updateCard(cardId, { coverAttachmentId: isCover ? null : att.id })}
                                 title={isCover ? 'Remove Cover' : 'Make Cover'}
                               >
-                                <ImageIcon size={13} />
+                                <ImageIcon size={14} />
                               </motion.button>
                             </>
                           )}
                           <a
                             href={att.dataUrl}
                             download={att.name}
-                            className="icon-btn"
-                            style={{ width: 26, height: 26 }}
-                            title="Download"
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              color: 'hsl(var(--primary))',
+                              borderColor: 'hsl(var(--primary) / 0.3)',
+                              textDecoration: 'none',
+                            }}
+                            title="Download Guide"
                           >
                             <Download size={13} />
+                            <span>Download</span>
                           </a>
                           <motion.button
                             whileTap={{ scale: 0.92 }}
                             className="icon-btn"
-                            style={{ width: 26, height: 26, color: 'hsl(var(--destructive))' }}
+                            style={{ width: 30, height: 30, color: 'hsl(var(--destructive))' }}
                             onClick={() => removeAttachment(cardId, att.id)}
                             title="Delete Attachment"
                           >
@@ -589,14 +678,14 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                     );
                   })}
                 </div>
-              )}
+              ) : null}
             </div>
 
-            {/* Comments */}
+            {/* Comments & Activity (Threaded Discussions) */}
             <div className="form-group" style={{ position: 'relative' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <MessageSquare size={13} /> Activity & Comments
+                  <MessageSquare size={13} /> Activity & Discussion ({card.comments?.length || 0})
                 </label>
                 {members.length > 0 && (
                   <motion.button
@@ -615,6 +704,36 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                   </motion.button>
                 )}
               </div>
+
+              {/* Replying Banner */}
+              {replyingTo && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 12px',
+                    borderRadius: '8px 8px 0 0',
+                    background: 'hsl(var(--primary) / 0.12)',
+                    border: '1px solid hsl(var(--primary) / 0.3)',
+                    borderBottom: 'none',
+                    fontSize: 11.5,
+                    color: 'hsl(var(--primary))',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Reply size={12} />
+                    <span>Replying to <strong>@{replyingTo.author}</strong></span>
+                  </div>
+                  <button
+                    onClick={() => setReplyingTo(null)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--muted-foreground))', padding: 2 }}
+                    title="Cancel reply"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
 
               {/* Mention Autocomplete Dropdown */}
               <AnimatePresence>
@@ -701,11 +820,15 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                   ref={commentInputRef}
                   type="text"
                   className="text-input"
-                  placeholder="Write a comment or type @ to mention..."
+                  placeholder={replyingTo ? `Reply to @${replyingTo.author}...` : "Write a comment or type @ to mention..."}
                   value={commentText}
                   onChange={handleCommentChange}
                   onKeyDown={handleCommentKeyDown}
                   onBlur={() => setTimeout(() => setShowMentionMenu(false), 200)}
+                  style={{
+                    borderTopLeftRadius: replyingTo ? 0 : undefined,
+                    borderTopRightRadius: replyingTo ? 0 : undefined,
+                  }}
                 />
                 <motion.button
                   whileTap={commentText.trim() ? { scale: 0.92 } : undefined}
@@ -722,31 +845,176 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                 </motion.button>
               </div>
 
+              {/* Threaded Comments List */}
               {card.comments?.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  {card.comments.map(c => (
-                    <div
-                      key={c.id}
-                      style={{
-                        padding: '10px 14px',
-                        borderRadius: 'var(--radius)',
-                        backgroundColor: 'hsl(var(--card))',
-                        boxShadow: 'var(--neu-shadow-raised-sm)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>
-                          {c.author}
-                        </span>
-                        <span style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))' }}>
-                          {formatTime(c.createdAt)}
-                        </span>
-                      </div>
-                      <p style={{ fontSize: 12.5, color: 'hsl(var(--foreground))', lineHeight: 1.4, margin: 0 }}>
-                        {renderCommentText(c.text)}
-                      </p>
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                  {(() => {
+                    const allComments = card.comments || [];
+                    const rootComments = allComments.filter(c => !c.parentId);
+
+                    return rootComments.map(c => {
+                      const childReplies = allComments.filter(r => r.parentId === c.id);
+
+                      return (
+                        <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {/* Root Comment Card */}
+                          <div
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: 'var(--radius)',
+                              backgroundColor: 'hsl(var(--card))',
+                              boxShadow: 'var(--neu-shadow-raised-sm)',
+                              border: '1px solid hsl(var(--border) / 0.6)',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div
+                                  style={{
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: '50%',
+                                    backgroundColor: c.avatarColor || '#6366f1',
+                                    color: '#fff',
+                                    fontSize: 9,
+                                    fontWeight: 700,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                >
+                                  {c.authorInitials || avatarInitials(c.author)}
+                                </div>
+                                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'hsl(var(--foreground))' }}>
+                                  {c.author}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))' }}>
+                                {formatTime(c.createdAt)}
+                              </span>
+                            </div>
+
+                            <p style={{ fontSize: 12.5, color: 'hsl(var(--foreground))', lineHeight: 1.4, margin: '4px 0 6px 0' }}>
+                              {renderCommentText(c.text)}
+                            </p>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                              <motion.button
+                                whileTap={{ scale: 0.94 }}
+                                onClick={() => {
+                                  setReplyingTo(c);
+                                  commentInputRef.current?.focus();
+                                }}
+                                style={{
+                                  background: 'hsl(var(--secondary))',
+                                  border: '1px solid hsl(var(--border) / 0.8)',
+                                  color: 'hsl(var(--primary))',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  padding: '3px 9px',
+                                  borderRadius: 6,
+                                  boxShadow: 'var(--neu-shadow-raised-sm)',
+                                }}
+                                title={`Reply to @${c.author}`}
+                              >
+                                <Reply size={12} /> Reply
+                              </motion.button>
+                            </div>
+                          </div>
+
+                          {/* Nested Replies */}
+                          {childReplies.length > 0 && (
+                            <div
+                              style={{
+                                marginLeft: 20,
+                                paddingLeft: 12,
+                                borderLeft: '2px solid hsl(var(--primary) / 0.35)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 6,
+                              }}
+                            >
+                              {childReplies.map(reply => (
+                                <div
+                                  key={reply.id}
+                                  style={{
+                                    padding: '8px 12px',
+                                    borderRadius: 'var(--radius)',
+                                    backgroundColor: 'hsl(var(--card) / 0.8)',
+                                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                                    border: '1px solid hsl(var(--border) / 0.5)',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <div
+                                        style={{
+                                          width: 18,
+                                          height: 18,
+                                          borderRadius: '50%',
+                                          backgroundColor: reply.avatarColor || '#6366f1',
+                                          color: '#fff',
+                                          fontSize: 8,
+                                          fontWeight: 700,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                        }}
+                                      >
+                                        {reply.authorInitials || avatarInitials(reply.author)}
+                                      </div>
+                                      <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>
+                                        {reply.author}
+                                      </span>
+                                      {reply.replyToAuthor && (
+                                        <span style={{ fontSize: 10.5, color: 'hsl(var(--primary))' }}>
+                                          → @{reply.replyToAuthor}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>
+                                      {formatTime(reply.createdAt)}
+                                    </span>
+                                  </div>
+                                  <p style={{ fontSize: 12, color: 'hsl(var(--foreground))', lineHeight: 1.35, margin: '2px 0 4px 0' }}>
+                                    {renderCommentText(reply.text)}
+                                  </p>
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                      onClick={() => {
+                                        setReplyingTo({ id: c.id, author: reply.author } as Comment);
+                                        commentInputRef.current?.focus();
+                                      }}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'hsl(var(--primary))',
+                                        fontSize: 10.5,
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 3,
+                                        padding: '1px 4px',
+                                        borderRadius: 4,
+                                      }}
+                                      title={`Reply to @${reply.author}`}
+                                    >
+                                      <Reply size={10} /> Reply
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>
@@ -896,17 +1164,24 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
               )}
             </div>
 
-            {/* Assignees */}
+            {/* Assignees (Owner & Admin Control) */}
             <div className="form-group">
-              <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Users size={12} /> Assignees
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0 }}>
+                  <Users size={12} /> Assignees
+                </label>
+                {!canAssign && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
+                    Owner & Admin only
+                  </span>
+                )}
+              </div>
+
               {members.length === 0 ? (
                 <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>No members yet</span>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              ) : canAssign ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
                   {members.map(m => {
-                    const currentUser = useAuthStore.getState().user;
                     const isCurrent = currentUser?.email && m.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
                     const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
                     const isAssigned = card.assignees?.includes(m.id);
@@ -927,10 +1202,54 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                           </div>
                         )}
                         <span style={{ flex: 1, textAlign: 'left' }}>{displayName}</span>
+                        {m.role === 'admin' && (
+                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))' }}>
+                            Admin
+                          </span>
+                        )}
                         {isAssigned && <CheckSquare size={13} color="hsl(var(--primary))" />}
                       </motion.button>
                     );
                   })}
+                </div>
+              ) : (
+                // Read-only assignee display for non-admins
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                  {card.assignees?.length > 0 ? (
+                    card.assignees.map(mId => {
+                      const m = members.find(mem => mem.id === mId);
+                      if (!m) return null;
+                      return (
+                        <div
+                          key={m.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '6px 8px',
+                            borderRadius: 8,
+                            background: 'hsl(var(--card))',
+                            boxShadow: 'var(--neu-shadow-raised-sm)',
+                            border: '1px solid hsl(var(--border) / 0.5)',
+                          }}
+                        >
+                          {m.avatarUrl ? (
+                            <img src={m.avatarUrl} alt={m.name} style={{ width: 20, height: 20, borderRadius: '50%' }} />
+                          ) : (
+                            <div style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {avatarInitials(m.name)}
+                            </div>
+                          )}
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>{m.name}</span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Unassigned</span>
+                  )}
+                  <div style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>
+                    🔒 Only the board owner or admins can assign team members.
+                  </div>
                 </div>
               )}
             </div>

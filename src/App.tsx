@@ -16,6 +16,7 @@ import SearchModal from './components/modals/SearchModal';
 import PrivacyModal from './components/modals/PrivacyModal';
 import SettingsModal from './components/modals/SettingsModal';
 import ConfirmModal from './components/modals/ConfirmModal';
+import { InboxDrawer } from './components/InboxDrawer';
 import { useWorkStore } from './store/useWorkStore';
 import { useNotifStore } from './store/useNotifStore';
 import { useEmailStore } from './store/useEmailStore';
@@ -112,6 +113,7 @@ export default function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showInbox, setShowInbox] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'appearance' | 'notifications' | 'email' | 'privacy' | 'labels'>('appearance');
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -293,6 +295,7 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
           page={page}
           activeView={viewMode}
           onSelectView={setViewMode}
+          onOpenInbox={() => setShowInbox(s => !s)}
           filterMemberId={filterMemberId}
           onFilterMember={setFilterMemberId}
           onManageMembers={() => setShowMembers(true)}
@@ -319,6 +322,7 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
                 <Topbar
                   page="dashboard"
                   onOpenSearch={() => setShowSearch(true)}
+                  onOpenInbox={() => setShowInbox(s => !s)}
                   onManageMembers={() => setShowMembers(true)}
                   onManageEmail={() => handleOpenSettings('email')}
                   onOpenPrivacy={() => handleOpenSettings('privacy')}
@@ -330,6 +334,12 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
                   onSelectBoard={handleSelectBoard}
                   onCreateBoard={() => setShowCreateBoard(true)}
                   onOpenCard={handleOpenCard}
+                />
+                <InboxDrawer
+                  isOpen={showInbox}
+                  onClose={() => setShowInbox(false)}
+                  board={useWorkStore.getState().getActiveBoard() || useWorkStore.getState().boards[0] || null}
+                  onOpenCard={cardId => handleOpenCard(cardId)}
                 />
               </motion.div>
             ) : (
@@ -343,6 +353,7 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
               >
                 <Topbar
                   onOpenSearch={() => setShowSearch(true)}
+                  onOpenInbox={() => setShowInbox(s => !s)}
                   onManageMembers={() => setShowMembers(true)}
                   onManageEmail={() => handleOpenSettings('email')}
                   onOpenPrivacy={() => handleOpenSettings('privacy')}
@@ -358,6 +369,8 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
                   onOpenCard={cardId => handleOpenCard(cardId)}
                   onAddColumn={() => setShowAddColumn(true)}
                   onCreateBoard={() => setShowCreateBoard(true)}
+                  showInbox={showInbox}
+                  onToggleInbox={() => setShowInbox(s => !s)}
                 />
               </motion.div>
             )}

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Board, Column, Card, Member, Attachment, Comment } from '../types';
+import type { Board, Column, Card, Member, MemberRole, Attachment, Comment } from '../types';
 import { AVATAR_COLORS, LABELS } from '../types';
 import { uid, avatarInitials } from '../utils';
 import { useEmailStore } from './useEmailStore';
@@ -43,23 +43,30 @@ interface WorkState {
   toggleCardLabel: (cardId: string, labelId: string) => void;
   toggleCardAssignee: (cardId: string, memberId: string) => void;
 
+  // Inbox actions
+  addInboxCard: (title: string, boardId?: string) => Card;
+  deleteInboxCard: (cardId: string) => void;
+  moveInboxCardToColumn: (cardId: string, toColId: string, afterCardId?: string) => void;
+  moveColumnCardToInbox: (cardId: string, fromColId: string) => void;
+
   // Attachment actions
   addAttachment: (cardId: string, att: Attachment) => void;
   removeAttachment: (cardId: string, attId: string) => void;
 
   // Comment actions
-  addComment: (cardId: string, text: string) => void;
+  addComment: (cardId: string, text: string, parentId?: string | null, replyToAuthor?: string | null) => void;
   deleteComment: (cardId: string, commentId: string) => void;
 
   // Member actions
-  addMember: (name: string, email: string, avatarUrl?: string) => string | null;
+  addMember: (name: string, email: string, avatarUrl?: string, role?: MemberRole) => string | null;
   updateMember: (memberId: string, patch: Partial<Member>) => void;
+  updateMemberRole: (boardId: string, memberId: string, role: MemberRole) => void;
   removeMember: (memberId: string) => void;
 
   // Helpers (read-only selectors)
   getActiveBoard: () => Board | undefined;
   getBoard: (boardId: string) => Board | undefined;
-  findCard: (cardId: string, boardId?: string) => { card: Card; column: Column; board: Board } | null;
+  findCard: (cardId: string, boardId?: string) => { card: Card; column?: Column; board: Board; isInbox?: boolean } | null;
 }
 
 const COLUMN_ORDER_MAP: Record<string, number> = {
@@ -82,11 +89,13 @@ export function sortColumnsByWorkflow(columns: Column[]): Column[] {
   return [...columns].sort((a, b) => getColOrder(a.name) - getColOrder(b.name));
 }
 
-function findCardInBoard(board: Board, cardId: string): { card: Card; column: Column } | null {
-  for (const col of board.columns) {
-    const card = col.cards.find(c => c.id === cardId);
-    if (card) return { card, column: col };
+function findCardInBoard(board: Board, cardId: string): { card: Card; column?: Column; isInbox?: boolean } | null {
+  for (const col of board.columns || []) {
+    const card = col.cards?.find(c => c.id === cardId);
+    if (card) return { card, column: col, isInbox: false };
   }
+  const inboxCard = (board.inboxCards || []).find(c => c.id === cardId);
+  if (inboxCard) return { card: inboxCard, isInbox: true };
   return null;
 }
 
@@ -108,6 +117,7 @@ function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => C
       ...col,
       cards: (col.cards || []).map(c => c.id === cardId ? updater(c) : c),
     })),
+    inboxCards: (board.inboxCards || []).map(c => c.id === cardId ? updater(c) : c),
   };
 }
 
@@ -147,21 +157,6 @@ export const useWorkStore = create<WorkState>()(
       activeBoardId: null,
       lastMoveSnapshot: null,
       isLoadingCloud: false,
-
-      getActiveBoard: () => {
-        const { boards, activeBoardId } = get();
-        return boards.find(b => b.id === activeBoardId);
-      },
-      getBoard: (boardId) => get().boards.find(b => b.id === boardId),
-      findCard: (cardId, boardId) => {
-        const { boards, activeBoardId } = get();
-        const targetId = boardId ?? activeBoardId;
-        const board = boards.find(b => b.id === targetId);
-        if (!board) return null;
-        const result = findCardInBoard(board, cardId);
-        if (!result) return null;
-        return { ...result, board };
-      },
 
       // ── Cloud Sync Actions ─────────────────────────────
       loadBoardsFromCloud: async (userEmail: string) => {
@@ -497,6 +492,116 @@ export const useWorkStore = create<WorkState>()(
         if (targetBoard) scheduleBoardSync(targetBoard, 250);
       },
 
+      addInboxCard: (title, boardId) => {
+        const card: Card = {
+          id: uid(),
+          title,
+          description: '',
+          comments: [],
+          attachments: [],
+          labels: [],
+          assignees: [],
+          dueDate: null,
+          completed: false,
+          completedAt: null,
+          createdAt: new Date().toISOString(),
+          isInbox: true,
+        };
+
+        let targetBoard: Board | undefined;
+        set(s => {
+          const bId = boardId || s.activeBoardId;
+          if (!bId) return s;
+          const updatedBoards = updateBoards(s.boards, bId, b => ({
+            ...b,
+            inboxCards: [card, ...(b.inboxCards || [])],
+          }));
+          targetBoard = updatedBoards.find(b => b.id === bId);
+          return { boards: updatedBoards };
+        });
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+        return card;
+      },
+
+      deleteInboxCard: (cardId) => {
+        let targetBoard: Board | undefined;
+        set(s => {
+          const tb = s.boards.find(b =>
+            (b.inboxCards || []).some(c => c.id === cardId)
+          ) || s.boards.find(b => b.id === s.activeBoardId);
+          if (!tb) return s;
+
+          const updatedBoards = updateBoards(s.boards, tb.id, b => ({
+            ...b,
+            inboxCards: (b.inboxCards || []).filter(c => c.id !== cardId),
+          }));
+          targetBoard = updatedBoards.find(b => b.id === tb.id);
+          return { boards: updatedBoards };
+        });
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+      },
+
+      moveInboxCardToColumn: (cardId, toColId, afterCardId) => {
+        let targetBoard: Board | undefined;
+        set(s => {
+          if (!s.activeBoardId) return s;
+          const currentBoard = s.boards.find(b => b.id === s.activeBoardId);
+          if (!currentBoard) return s;
+
+          const card = (currentBoard.inboxCards || []).find(c => c.id === cardId);
+          if (!card) return s;
+
+          const updatedCard: Card = { ...card, isInbox: false };
+          const toCol = currentBoard.columns.find(c => c.id === toColId);
+          if (!toCol) return s;
+
+          const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => {
+            const remainingInbox = (b.inboxCards || []).filter(c => c.id !== cardId);
+            const newColumns = b.columns.map(col => {
+              if (col.id !== toColId) return col;
+              const cards = [...col.cards];
+              const afterIdx = afterCardId ? cards.findIndex(c => c.id === afterCardId) : -1;
+              if (afterIdx === -1) cards.push(updatedCard);
+              else cards.splice(afterIdx, 0, updatedCard);
+              return { ...col, cards };
+            });
+            return { ...b, columns: newColumns, inboxCards: remainingInbox };
+          });
+
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
+          return { boards: updatedBoards };
+        });
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+      },
+
+      moveColumnCardToInbox: (cardId, fromColId) => {
+        let targetBoard: Board | undefined;
+        set(s => {
+          if (!s.activeBoardId) return s;
+          const currentBoard = s.boards.find(b => b.id === s.activeBoardId);
+          if (!currentBoard) return s;
+
+          const fromCol = currentBoard.columns.find(c => c.id === fromColId);
+          const card = fromCol?.cards.find(c => c.id === cardId);
+          if (!card) return s;
+
+          const updatedCard: Card = { ...card, isInbox: true };
+
+          const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => {
+            const newColumns = b.columns.map(col => {
+              if (col.id !== fromColId) return col;
+              return { ...col, cards: col.cards.filter(c => c.id !== cardId) };
+            });
+            const newInbox = [updatedCard, ...(b.inboxCards || [])];
+            return { ...b, columns: newColumns, inboxCards: newInbox };
+          });
+
+          targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
+          return { boards: updatedBoards };
+        });
+        if (targetBoard) scheduleBoardSync(targetBoard, 250);
+      },
+
       toggleCardComplete: (cardId) => {
         let targetBoard: Board | undefined;
         set(s => {
@@ -664,7 +769,7 @@ export const useWorkStore = create<WorkState>()(
       },
 
       // ── Comment actions ───────────────────────────────
-      addComment: (cardId, text) => {
+      addComment: (cardId, text, parentId = null, replyToAuthor = null) => {
         const currentUser = useAuthStore.getState().user;
         const authorName = (currentUser?.name && currentUser.name.trim()) ? currentUser.name : 'Me';
         const authorInitialsStr = avatarInitials(authorName);
@@ -675,6 +780,8 @@ export const useWorkStore = create<WorkState>()(
           authorInitials: authorInitialsStr,
           avatarColor: '#6366f1',
           text,
+          parentId: parentId || null,
+          replyToAuthor: replyToAuthor || null,
           createdAt: new Date().toISOString(),
         };
 
@@ -682,7 +789,8 @@ export const useWorkStore = create<WorkState>()(
 
         set(s => {
           const tb = s.boards.find(b =>
-            b.columns?.some(col => col.cards?.some(c => c.id === cardId))
+            b.columns?.some(col => col.cards?.some(c => c.id === cardId)) ||
+            (b.inboxCards || []).some(c => c.id === cardId)
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
           if (!tb) return s;
@@ -757,7 +865,8 @@ export const useWorkStore = create<WorkState>()(
         let targetBoard: Board | undefined;
         set(s => {
           const tb = s.boards.find(b =>
-            b.columns?.some(col => col.cards?.some(c => c.id === cardId))
+            b.columns?.some(col => col.cards?.some(c => c.id === cardId)) ||
+            (b.inboxCards || []).some(c => c.id === cardId)
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
           if (!tb) return s;
@@ -774,7 +883,7 @@ export const useWorkStore = create<WorkState>()(
       },
 
       // ── Member actions ────────────────────────────────
-      addMember: (name, email, avatarUrl) => {
+      addMember: (name, email, avatarUrl, role = 'member') => {
         let newId: string | null = null;
         let newMember: Member | null = null;
         const currentActiveId = get().activeBoardId;
@@ -790,7 +899,7 @@ export const useWorkStore = create<WorkState>()(
           }
           const color = AVATAR_COLORS[currentBoard.members.length % AVATAR_COLORS.length];
           newId = uid();
-          newMember = { id: newId!, name: name.trim(), email: cleanEmail, color, avatarUrl };
+          newMember = { id: newId!, name: name.trim(), email: cleanEmail, color, avatarUrl, role };
 
           const updatedBoards = s.boards.map(b => {
             if (b.id !== currentActiveId) return b;
@@ -821,6 +930,22 @@ export const useWorkStore = create<WorkState>()(
           return { boards: updatedBoards };
         });
         if (targetBoard) scheduleBoardSync(targetBoard, 250);
+      },
+
+      updateMemberRole: (boardId, memberId, role) => {
+        let targetBoard: Board | undefined;
+        set(s => {
+          const updatedBoards = updateBoards(s.boards, boardId, b => ({
+            ...b,
+            members: b.members.map(m => m.id === memberId ? { ...m, role } : m),
+          }));
+          targetBoard = updatedBoards.find(b => b.id === boardId);
+          return { boards: updatedBoards };
+        });
+        if (targetBoard) {
+          scheduleBoardSync(targetBoard, 250);
+          supabaseService.updateMemberRole(boardId, memberId, role);
+        }
       },
 
       removeMember: (memberId) => {
@@ -854,6 +979,30 @@ export const useWorkStore = create<WorkState>()(
         if (targetBoard) {
           scheduleBoardSync(targetBoard, 250);
         }
+      },
+
+      // ── Helpers (read-only selectors) ─────────────────
+      getActiveBoard: () => {
+        const s = get();
+        return s.boards.find(b => b.id === s.activeBoardId);
+      },
+
+      getBoard: (boardId: string) => {
+        return get().boards.find(b => b.id === boardId);
+      },
+
+      findCard: (cardId: string, boardId?: string) => {
+        const s = get();
+        const targetBoard = boardId
+          ? s.boards.find(b => b.id === boardId)
+          : (s.boards.find(b => b.id === s.activeBoardId) || s.boards.find(b =>
+              b.columns?.some(col => col.cards?.some(c => c.id === cardId)) ||
+              (b.inboxCards || []).some(c => c.id === cardId)
+            ));
+        if (!targetBoard) return null;
+        const res = findCardInBoard(targetBoard, cardId);
+        if (!res) return null;
+        return { card: res.card, column: res.column, board: targetBoard, isInbox: res.isInbox };
       },
     }),
     { name: 'worklane_data_v4' }

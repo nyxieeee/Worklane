@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Plus, Edit3, Trash2, Layout, Check, X,
-  Calendar, CheckSquare, Square, Filter, ChevronRight, ChevronLeft, User
+  Plus, Edit3, Trash2, Layout, Check, X, Inbox,
+  Calendar, CheckSquare, Square, Filter, ChevronRight, ChevronLeft, User, Eye
 } from 'lucide-react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useToastStore } from '../store/useToastStore';
+import { useAuthStore } from '../store/useAuthStore';
 import Column from './Column';
+import { InboxDrawer } from './InboxDrawer';
 import { formatDueDate, avatarInitials } from '../utils';
 import { LABELS, type Member } from '../types';
 import { sortColumnsByWorkflow } from '../store/useWorkStore';
@@ -14,6 +16,7 @@ import { sortColumnsByWorkflow } from '../store/useWorkStore';
 interface DragState {
   cardId: string;
   fromColId: string;
+  fromInbox?: boolean;
 }
 
 interface ContextMenu {
@@ -29,6 +32,8 @@ interface Props {
   onOpenCard: (cardId: string) => void;
   onAddColumn: () => void;
   onCreateBoard: () => void;
+  showInbox?: boolean;
+  onToggleInbox?: () => void;
 }
 
 const view3DVariants: Variants = {
@@ -43,7 +48,9 @@ export default function BoardArea({
   onClearFilter,
   onOpenCard,
   onAddColumn,
-  onCreateBoard
+  onCreateBoard,
+  showInbox: controlledShowInbox,
+  onToggleInbox: controlledToggleInbox,
 }: Props) {
   const boards             = useWorkStore(s => s.boards);
   const activeBoardId      = useWorkStore(s => s.activeBoardId);
@@ -52,8 +59,12 @@ export default function BoardArea({
   const renameColumn       = useWorkStore(s => s.renameColumn);
   const toggleCardComplete = useWorkStore(s => s.toggleCardComplete);
   const showToast          = useToastStore(s => s.showToast);
+  const currentUser        = useAuthStore(s => s.user);
 
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [internalShowInbox, setInternalShowInbox] = useState(false);
+  const showInbox = controlledShowInbox !== undefined ? controlledShowInbox : internalShowInbox;
+  const toggleInbox = controlledToggleInbox || (() => setInternalShowInbox(v => !v));
   const [renameColId, setRenameColId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -158,21 +169,114 @@ export default function BoardArea({
   };
   const nextColId = dragState ? getNextColId(dragState.fromColId) : null;
 
+  const currentEmail = currentUser?.email?.toLowerCase().trim();
+  const isOwner = !!(board?.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail);
+  const currentMemberObj = board?.members?.find(m => m.email && m.email.toLowerCase().trim() === currentEmail);
+  const isObserver = !isOwner && currentMemberObj?.role === 'observer';
+
   const activeMember = board.members?.find((m: Member) => m.id === filterMemberId);
 
   return (
-    <div className="board-view-container" style={{ perspective: 1200 }}>
-      {activeMember && (
-        <div className="board-filter-banner">
-          <div className="board-filter-left">
-            <Filter size={13} color="hsl(var(--primary))" />
-            <span>Showing tasks for <strong>{activeMember.name}</strong></span>
-          </div>
-          <button onClick={onClearFilter} className="filter-clear-btn-pill">
-            <X size={12} /> Clear Filter
-          </button>
+    <div className="board-view-container" style={{ perspective: 1200, position: 'relative' }}>
+      {/* Board View Subheader with Inbox Toggle & Badges */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 18px',
+          background: 'hsl(var(--card) / 0.6)',
+          backdropFilter: 'blur(10px)',
+          borderBottom: '1px solid hsl(var(--border) / 0.5)',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Inbox Toggle Button */}
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            className={`btn ${showInbox ? 'btn-primary' : 'btn-secondary'}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 12,
+              padding: '5px 12px',
+              borderRadius: 8,
+              boxShadow: showInbox ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
+            }}
+            onClick={toggleInbox}
+            title="Toggle Inbox Drawer"
+          >
+            <Inbox size={14} />
+            <span>Inbox</span>
+            {(board.inboxCards?.length || 0) > 0 && (
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 10,
+                  backgroundColor: showInbox ? 'rgba(255,255,255,0.25)' : 'hsl(var(--primary) / 0.18)',
+                  color: showInbox ? '#fff' : 'hsl(var(--primary))',
+                }}
+              >
+                {board.inboxCards?.length}
+              </span>
+            )}
+          </motion.button>
+
+          {/* Observer Role Indicator */}
+          {isObserver && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 10px',
+                borderRadius: 8,
+                background: 'hsl(38 92% 50% / 0.15)',
+                color: '#d97706',
+                border: '1px solid hsl(38 92% 50% / 0.3)',
+                fontSize: 11.5,
+                fontWeight: 600,
+              }}
+            >
+              <Eye size={13} />
+              <span>Observer Mode (Architecture Study)</span>
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Filter Info if active */}
+        {activeMember && (
+          <div className="board-filter-banner" style={{ margin: 0, padding: '4px 10px' }}>
+            <div className="board-filter-left">
+              <Filter size={12} color="hsl(var(--primary))" />
+              <span style={{ fontSize: 12 }}>Showing tasks for <strong>{activeMember.name}</strong></span>
+            </div>
+            <button onClick={onClearFilter} className="filter-clear-btn-pill" style={{ padding: '2px 8px', fontSize: 11 }}>
+              <X size={11} /> Clear
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Floating Inbox Drawer */}
+      <InboxDrawer
+        isOpen={showInbox}
+        onClose={() => controlledToggleInbox ? controlledToggleInbox() : setInternalShowInbox(false)}
+        board={board}
+        onOpenCard={onOpenCard}
+        onDragStart={(e, cardId) => {
+          if (isObserver) return;
+          setDragState({ cardId, fromColId: 'inbox', fromInbox: true });
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragEnd={() => setDragState(null)}
+        dragState={dragState}
+      />
 
       <AnimatePresence mode="wait">
         {viewMode === 'list' && (
@@ -190,17 +294,12 @@ export default function BoardArea({
                 <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))', backgroundColor: 'hsl(var(--card))', boxShadow: 'var(--neu-shadow-input)', padding: '2px 8px', borderRadius: 9999 }}>
                   {filteredColumns.reduce((sum, c) => sum + c.cards.length, 0)} tasks
                 </span>
-                {activeMember && (
-                  <span className="filter-clear-btn-pill">
-                    <User size={12} />
-                    <span>Filtered: {activeMember.name}</span>
-                    <button onClick={onClearFilter} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}><X size={11} /></button>
-                  </span>
-                )}
               </div>
-              <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary" onClick={onAddColumn} style={{ fontSize: 12, padding: '6px 12px' }}>
-                <Plus size={13} /> Add Row
-              </motion.button>
+              {!isObserver && (
+                <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary" onClick={onAddColumn} style={{ fontSize: 12, padding: '6px 12px' }}>
+                  <Plus size={13} /> Add Row
+                </motion.button>
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -463,12 +562,15 @@ export default function BoardArea({
                     setShowRenameModal(true);
                   }}
                   isNextColumn={dragState !== null && col.id === nextColId}
+                  isObserver={isObserver}
                 />
               </motion.div>
             ))}
-            <motion.button whileTap={{ scale: 0.96 }} className="add-column-btn" onClick={onAddColumn}>
-              <Plus size={15} /> Add Column
-            </motion.button>
+            {!isObserver && (
+              <motion.button whileTap={{ scale: 0.96 }} className="add-column-btn" onClick={onAddColumn}>
+                <Plus size={15} /> Add Column
+              </motion.button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

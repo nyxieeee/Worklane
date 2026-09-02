@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import {
-  KanbanSquare, List, Calendar, Users, BellRing,
+  KanbanSquare, List, Calendar, Users, BellRing, Inbox,
   Mail, Shield, Plus, X, ChevronLeft, ChevronRight,
   ArrowLeft, Check, Sun, Moon, LayoutDashboard,
   Eye, EyeOff, LogOut, Settings, Sliders
@@ -21,6 +21,7 @@ interface Props {
   page: 'dashboard' | 'board';
   activeView: 'board' | 'list' | 'calendar';
   onSelectView: (view: 'board' | 'list' | 'calendar') => void;
+  onOpenInbox: () => void;
   onManageMembers: () => void;
   onOpenSettings: (tab?: 'appearance' | 'notifications' | 'email' | 'privacy' | 'labels') => void;
   onToggleNotif: () => void;
@@ -34,7 +35,7 @@ interface Props {
 }
 
 export default function Sidebar({
-  page, activeView, onSelectView,
+  page, activeView, onSelectView, onOpenInbox,
   onManageMembers, onOpenSettings, onToggleNotif,
   onFilterMember, filterMemberId, onCreateBoard,
   onGoToDashboard, onSelectBoard,
@@ -145,6 +146,28 @@ export default function Sidebar({
                 onClick={() => onSelectView('calendar')}
               >
                 <Calendar size={16} />
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                className="icon-btn"
+                title="Inbox & Concerns"
+                onClick={onOpenInbox}
+                style={{ position: 'relative' }}
+              >
+                <Inbox size={16} />
+                {(activeBoard?.inboxCards?.length || 0) > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      backgroundColor: 'hsl(var(--primary))',
+                    }}
+                  />
+                )}
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.92 }}
@@ -356,6 +379,29 @@ export default function Sidebar({
                 <Calendar size={14} />
                 <span style={{ flex: 1 }}>Calendar</span>
                 {activeView === 'calendar' && <Check size={13} color="hsl(var(--primary))" />}
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                className="sidebar-nav-item"
+                onClick={onOpenInbox}
+                style={{ color: 'hsl(var(--primary))' }}
+              >
+                <Inbox size={14} />
+                <span style={{ flex: 1, fontWeight: 600 }}>Inbox / Concerns</span>
+                {(activeBoard?.inboxCards?.length || 0) > 0 && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: 8,
+                      backgroundColor: 'hsl(var(--primary) / 0.15)',
+                      color: 'hsl(var(--primary))',
+                    }}
+                  >
+                    {activeBoard?.inboxCards?.length}
+                  </span>
+                )}
               </motion.button>
             </div>
 

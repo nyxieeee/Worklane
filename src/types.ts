@@ -1,11 +1,14 @@
 // ── Domain Types ──────────────────────────────────────────────────────
 
+export type MemberRole = 'owner' | 'admin' | 'member' | 'observer';
+
 export interface Member {
   id: string;
   name: string;
   email: string;
   color: string;
   avatarUrl?: string;
+  role?: MemberRole;
 }
 
 export interface Attachment {
@@ -24,6 +27,8 @@ export interface Comment {
   avatarColor: string;
   text: string;
   createdAt: string;
+  parentId?: string | null;
+  replyToAuthor?: string | null;
 }
 
 export interface Card {
@@ -39,6 +44,7 @@ export interface Card {
   completedAt: string | null;
   createdAt: string;
   coverAttachmentId?: string | null;
+  isInbox?: boolean;
   // due-date alert flags
   [key: string]: unknown;
 }
@@ -56,6 +62,7 @@ export interface Board {
   createdBy?: string; // email of the user who created this board
   members: Member[];
   columns: Column[];
+  inboxCards?: Card[];
 }
 
 export interface Notification {

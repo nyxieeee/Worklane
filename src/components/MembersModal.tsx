@@ -25,14 +25,19 @@ export default function MembersModal({ onClose }: Props) {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'admin' | 'member' | 'observer'>('member');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
+
+  const updateMemberRole = useWorkStore(s => s.updateMemberRole);
 
   if (!board) return null;
 
   const members = board.members || [];
   const currentEmail = currentUser?.email?.toLowerCase().trim();
-  const isOwner = board.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail;
-  const isMember = members.some(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
+  const isOwner = !!(board.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail);
+  const currentMemberObj = members.find(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
+  const isAdmin = !isOwner && currentMemberObj?.role === 'admin';
+  const canManage = isOwner || isAdmin || !board.createdBy;
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>, memberId?: string) => {
     const file = e.target.files?.[0];
@@ -59,7 +64,7 @@ export default function MembersModal({ onClose }: Props) {
   const handleAdd = () => {
     if (!name.trim()) return;
     const trimmedEmail = email.trim();
-    const result = addMember(name.trim(), trimmedEmail, avatarUrl);
+    const result = addMember(name.trim(), trimmedEmail, avatarUrl, role);
     if (result === null && trimmedEmail) {
       showToast('Member with that email is already on this board', 'error');
     } else {
@@ -69,7 +74,7 @@ export default function MembersModal({ onClose }: Props) {
       if (trimmedEmail) {
         useNotifStore.getState().addNotification(
           `Invited to board: ${board.name}`,
-          `${adderName} added you as a collaborator on "${board.name}".`,
+          `${adderName} added you as ${role === 'observer' ? 'an Observer' : 'a Member'} on "${board.name}".`,
           'users',
           null,
           board.id,
@@ -80,14 +85,15 @@ export default function MembersModal({ onClose }: Props) {
         useEmailStore.getState().sendEmailNotification({
           recipient: { id: result || uid(), name: name.trim(), email: trimmedEmail, color: '#6366f1' },
           subject: `You've been added to board "${board.name}" on Worklane`,
-          body: `Hi ${name.trim()},\n\n${adderName} added you to collaborate on board "${board.name}". You can now view and edit tasks in this workspace.\n\nWorklane Team`,
+          body: `Hi ${name.trim()},\n\n${adderName} added you as ${role === 'observer' ? 'an Observer (study mode)' : 'a Member'} to collaborate on board "${board.name}".\n\nWorklane Team`,
           eventType: 'member_added',
         });
       }
 
-      showToast(`Added ${name.trim()} to "${board.name}" and notified`, 'success');
+      showToast(`Added ${name.trim()} (${role === 'observer' ? 'Observer' : 'Member'}) to "${board.name}"`, 'success');
       setName('');
       setEmail('');
+      setRole('member');
       setAvatarUrl(undefined);
     }
   };
@@ -116,12 +122,12 @@ export default function MembersModal({ onClose }: Props) {
         exit={{ opacity: 0, scale: 0.94, rotateX: 12, translateZ: -50 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
         className="modal small-modal"
-        style={{ transformStyle: 'preserve-3d' }}
+        style={{ transformStyle: 'preserve-3d', maxWidth: 520 }}
         onClick={e => e.stopPropagation()}
       >
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h2 className="modal-title">Board Members</h2>
+            <h2 className="modal-title">Board Team & Roles</h2>
             <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', backgroundColor: 'hsl(var(--card))', boxShadow: 'var(--neu-shadow-input)', padding: '2px 8px', borderRadius: 9999 }}>
               {members.length}
             </span>
@@ -132,7 +138,10 @@ export default function MembersModal({ onClose }: Props) {
         <div className="modal-body">
           {/* Current Members List */}
           <div>
-            <label className="field-label" style={{ marginBottom: 10, display: 'block' }}>Current Team</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <label className="field-label" style={{ margin: 0 }}>Current Team & Access Levels</label>
+            </div>
+
             {members.length === 0 ? (
               <div style={{ padding: '16px', textAlign: 'center', color: 'hsl(var(--muted-foreground))', fontSize: 13 }}>
                 No members yet
@@ -142,6 +151,7 @@ export default function MembersModal({ onClose }: Props) {
                 {members.map(m => {
                   const isCurrent = currentEmail && m.email && m.email.toLowerCase().trim() === currentEmail;
                   const isMemberOwner = board.createdBy && m.email && m.email.toLowerCase().trim() === board.createdBy.toLowerCase().trim();
+                  const memberRole = isMemberOwner ? 'owner' : (m.role || 'member');
 
                   return (
                     <div
@@ -150,7 +160,7 @@ export default function MembersModal({ onClose }: Props) {
                         display: 'flex',
                         alignItems: 'center',
                         gap: 12,
-                        padding: '8px 12px',
+                        padding: '10px 12px',
                         borderRadius: 'var(--radius)',
                         backgroundColor: 'hsl(var(--card))',
                         boxShadow: 'var(--neu-shadow-raised-sm)',
@@ -162,8 +172,8 @@ export default function MembersModal({ onClose }: Props) {
                           src={m.avatarUrl}
                           alt={m.name}
                           style={{
-                            width: 32,
-                            height: 32,
+                            width: 34,
+                            height: 34,
                             borderRadius: '50%',
                             objectFit: 'cover',
                             flexShrink: 0,
@@ -173,8 +183,8 @@ export default function MembersModal({ onClose }: Props) {
                       ) : (
                         <div
                           style={{
-                            width: 32,
-                            height: 32,
+                            width: 34,
+                            height: 34,
                             borderRadius: '50%',
                             backgroundColor: m.color || '#6366f1',
                             color: '#fff',
@@ -197,13 +207,8 @@ export default function MembersModal({ onClose }: Props) {
                           <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>
                             {m.name}
                           </span>
-                          {isMemberOwner && (
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))' }}>
-                              Owner
-                            </span>
-                          )}
-                          {isCurrent && !isMemberOwner && (
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, backgroundColor: 'hsl(var(--card))', boxShadow: 'var(--neu-shadow-input)', color: 'hsl(var(--muted-foreground))' }}>
+                          {isCurrent && (
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999, backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
                               You
                             </span>
                           )}
@@ -212,6 +217,95 @@ export default function MembersModal({ onClose }: Props) {
                           <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {m.email}
                           </div>
+                        )}
+                      </div>
+
+                      {/* Role Selector / Badge */}
+                      <div>
+                        {isMemberOwner ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))' }}>
+                            👑 Owner
+                          </span>
+                        ) : isOwner ? (
+                          // Owner can assign Admin, Member, or Observer
+                          <select
+                            value={m.role || 'member'}
+                            onChange={(e) => {
+                              const newRole = e.target.value as 'admin' | 'member' | 'observer';
+                              updateMemberRole(board.id, m.id, newRole);
+                              const roleLabel = newRole === 'admin' ? 'Admin' : newRole === 'observer' ? 'Observer (Intern)' : 'Member';
+                              showToast(`${m.name}'s role updated to ${roleLabel}`, 'success');
+                            }}
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              border: '1px solid hsl(var(--border))',
+                              background: m.role === 'admin'
+                                ? 'hsl(var(--primary) / 0.18)'
+                                : m.role === 'observer'
+                                ? 'hsl(38 92% 50% / 0.15)'
+                                : 'hsl(var(--card))',
+                              color: m.role === 'admin'
+                                ? 'hsl(var(--primary))'
+                                : m.role === 'observer'
+                                ? '#f59e0b'
+                                : 'hsl(var(--foreground))',
+                              cursor: 'pointer',
+                              outline: 'none',
+                            }}
+                          >
+                            <option value="admin">⭐ Admin (Full Board Access)</option>
+                            <option value="member">👤 Member (Active)</option>
+                            <option value="observer">👁️ Observer (Intern)</option>
+                          </select>
+                        ) : isAdmin ? (
+                          // Admin can change roles between Member and Observer
+                          <select
+                            value={m.role || 'member'}
+                            onChange={(e) => {
+                              const newRole = e.target.value as 'member' | 'observer';
+                              updateMemberRole(board.id, m.id, newRole);
+                              showToast(`${m.name}'s role updated to ${newRole === 'observer' ? 'Observer (Intern)' : 'Member'}`, 'success');
+                            }}
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              border: '1px solid hsl(var(--border))',
+                              background: (m.role === 'observer') ? 'hsl(38 92% 50% / 0.15)' : 'hsl(var(--card))',
+                              color: (m.role === 'observer') ? '#f59e0b' : 'hsl(var(--foreground))',
+                              cursor: 'pointer',
+                              outline: 'none',
+                            }}
+                          >
+                            <option value="member">👤 Member (Active)</option>
+                            <option value="observer">👁️ Observer (Intern)</option>
+                          </select>
+                        ) : (
+                          // Read-only badge for regular members & observers
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              backgroundColor: m.role === 'admin'
+                                ? 'hsl(var(--primary) / 0.15)'
+                                : m.role === 'observer'
+                                ? 'hsl(38 92% 50% / 0.15)'
+                                : 'hsl(var(--muted))',
+                              color: m.role === 'admin'
+                                ? 'hsl(var(--primary))'
+                                : m.role === 'observer'
+                                ? '#f59e0b'
+                                : 'hsl(var(--foreground))',
+                            }}
+                          >
+                            {m.role === 'admin' ? '⭐ Admin' : m.role === 'observer' ? '👁️ Observer' : '👤 Member'}
+                          </span>
                         )}
                       </div>
 
@@ -229,7 +323,7 @@ export default function MembersModal({ onClose }: Props) {
                           </motion.button>
                         ) : null
                       ) : (
-                        (isOwner || !board.createdBy) && (
+                        canManage && (
                           <motion.button
                             whileTap={{ scale: 0.9 }}
                             className="icon-btn"
@@ -261,9 +355,9 @@ export default function MembersModal({ onClose }: Props) {
           </div>
 
           {/* Add Member Form */}
-          <div style={{ marginTop: 12, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <label className="field-label">Add New Member</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid hsl(var(--border) / 0.6)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label className="field-label" style={{ margin: 0 }}>Add New Team Member</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr', gap: 8 }}>
               <input
                 type="text"
                 className="text-input"
@@ -278,7 +372,22 @@ export default function MembersModal({ onClose }: Props) {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
               />
+              <select
+                value={role}
+                onChange={e => setRole(e.target.value as 'admin' | 'member' | 'observer')}
+                className="text-input"
+                style={{ cursor: 'pointer', fontSize: 12 }}
+              >
+                {isOwner && <option value="admin">⭐ Admin (Co-Manager)</option>}
+                <option value="member">👤 Member (Active)</option>
+                <option value="observer">👁️ Observer (Intern)</option>
+              </select>
             </div>
+
+            <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
+              💡 <strong>Roles:</strong> <strong>Admin</strong> can assign tasks and manage members. <strong>Member</strong> can complete cards and participate. <strong>Observer</strong> has read-only study access for learning architecture.
+            </div>
+
             <motion.button
               whileTap={(name.trim() && email.trim()) ? { scale: 0.95 } : undefined}
               className="btn btn-primary"
@@ -295,7 +404,7 @@ export default function MembersModal({ onClose }: Props) {
           </div>
 
           {/* Leave Board Option for enrolled non-owner members only */}
-          {!isOwner && isMember && (
+          {!isOwner && !!currentMemberObj && (
             <div
               style={{
                 marginTop: 14,

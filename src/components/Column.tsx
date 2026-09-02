@@ -10,6 +10,7 @@ import CardComponent from './Card';
 interface DragState {
   cardId: string;
   fromColId: string;
+  fromInbox?: boolean;
 }
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
   onOpenCard: (cardId: string) => void;
   onStartRename: (colId: string, name: string) => void;
   isNextColumn?: boolean;
+  isObserver?: boolean;
 }
 
 function getColDotColor(name: string): string {
@@ -32,11 +34,12 @@ function getColDotColor(name: string): string {
   return '#64748b';
 }
 
-export default function Column({ col, colIndex, dragState, setDragState, onOpenCard, onStartRename }: Props) {
+export default function Column({ col, colIndex, dragState, setDragState, onOpenCard, onStartRename, isObserver }: Props) {
   const addCard            = useWorkStore(s => s.addCard);
   const deleteColumn       = useWorkStore(s => s.deleteColumn);
   const toggleCardComplete = useWorkStore(s => s.toggleCardComplete);
   const moveCard           = useWorkStore(s => s.moveCard);
+  const moveInboxCardToColumn = useWorkStore(s => s.moveInboxCardToColumn);
   const undoLastMove       = useWorkStore(s => s.undoLastMove);
   const showToast          = useToastStore(s => s.showToast);
   const showConfirm        = useConfirmStore(s => s.showConfirm);
@@ -80,6 +83,14 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
     setIsDragOver(false);
     setActiveDropIdx(null);
     if (!dragState) return;
+
+    if (dragState.fromInbox) {
+      moveInboxCardToColumn(dragState.cardId, col.id, afterCardId);
+      setDragState(null);
+      showToast(`Moved to ${col.name}`, 'info');
+      return;
+    }
+
     moveCard(dragState.cardId, dragState.fromColId, col.id, afterCardId);
     setDragState(null);
     showToast('Card moved', 'info', 5000, {
@@ -117,29 +128,30 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
             {completedCount > 0 ? `${completedCount}/${col.cards.length}` : col.cards.length}
           </span>
         </div>
-        <div className="column-actions">
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            className="icon-btn"
-            style={{ width: 24, height: 24 }}
-            title="Add card"
-            onClick={() => setShowAddCard(true)}
-          >
-            <Plus size={14} />
-          </motion.button>
-          <div style={{ position: 'relative' }} ref={menuRef}>
+        {!isObserver && (
+          <div className="column-actions">
             <motion.button
               whileTap={{ scale: 0.9 }}
               className="icon-btn"
               style={{ width: 24, height: 24 }}
-              title="Column options"
-              onClick={e => {
-                e.stopPropagation();
-                setMenuOpen(o => !o);
-              }}
+              title="Add card"
+              onClick={() => setShowAddCard(true)}
             >
-              <MoreHorizontal size={14} />
+              <Plus size={14} />
             </motion.button>
+            <div style={{ position: 'relative' }} ref={menuRef}>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                className="icon-btn"
+                style={{ width: 24, height: 24 }}
+                title="Column options"
+                onClick={e => {
+                  e.stopPropagation();
+                  setMenuOpen(o => !o);
+                }}
+              >
+                <MoreHorizontal size={14} />
+              </motion.button>
 
             <AnimatePresence>
               {menuOpen && (
@@ -203,9 +215,10 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
                   </motion.button>
                 </motion.div>
               )}
-            </AnimatePresence>
+              </AnimatePresence>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Cards container */}
@@ -231,16 +244,21 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
               colId={col.id}
               accentColor={dotColor}
               isUrgent={isUrgentCol}
+              isObserver={isObserver}
               onClick={() => onOpenCard(card.id)}
-              onToggleComplete={e => { e.stopPropagation(); toggleCardComplete(card.id); }}
+              onToggleComplete={e => {
+                e.stopPropagation();
+                if (!isObserver) toggleCardComplete(card.id);
+              }}
               onDragStart={e => {
+                if (isObserver) return;
                 setDragState({ cardId: card.id, fromColId: col.id });
                 (e.currentTarget as HTMLElement).classList.add('dragging');
                 e.dataTransfer.effectAllowed = 'move';
               }}
               onDragEnd={() => { setDragState(null); }}
             />
-            {dragState && <div {...dropZoneProps(col.cards[idx + 1]?.id, idx + 1)} />}
+            {dragState && !isObserver && <div {...dropZoneProps(col.cards[idx + 1]?.id, idx + 1)} />}
           </React.Fragment>
         ))}
 
@@ -261,60 +279,68 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
       </div>
 
       {/* Footer / Add Card Form */}
-      <div style={{ padding: '10px 12px' }}>
-        {showAddCard ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <textarea
-              ref={textareaRef}
-              className="textarea-input"
-              placeholder="What needs to be done?"
-              maxLength={140}
-              rows={2}
-              value={newCardTitle}
-              onChange={e => setNewCardTitle(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCard(); }
-                if (e.key === 'Escape') { setShowAddCard(false); setNewCardTitle(''); }
-              }}
-              autoFocus
-            />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                className="btn btn-ghost"
-                style={{ padding: '4px 8px', fontSize: 12 }}
-                onClick={() => { setShowAddCard(false); setNewCardTitle(''); }}
-              >
-                Cancel
-              </motion.button>
-              <motion.button
-                whileTap={newCardTitle.trim() ? { scale: 0.95 } : undefined}
-                className="btn btn-primary"
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 12,
-                  opacity: newCardTitle.trim() ? 1 : 0.5,
-                  cursor: newCardTitle.trim() ? 'pointer' : 'not-allowed',
+      {!isObserver && (
+        <div style={{ padding: '10px 12px' }}>
+          {showAddCard ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <textarea
+                ref={textareaRef}
+                className="textarea-input"
+                placeholder="What needs to be done?"
+                maxLength={140}
+                rows={2}
+                value={newCardTitle}
+                onChange={e => setNewCardTitle(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCard(); }
+                  if (e.key === 'Escape') { setShowAddCard(false); setNewCardTitle(''); }
                 }}
-                disabled={!newCardTitle.trim()}
-                onClick={handleAddCard}
-              >
-                Add Card
-              </motion.button>
+                autoFocus
+              />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  className="btn btn-ghost"
+                  style={{ padding: '4px 8px', fontSize: 12 }}
+                  onClick={() => { setShowAddCard(false); setNewCardTitle(''); }}
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  whileTap={newCardTitle.trim() ? { scale: 0.95 } : undefined}
+                  className="btn btn-primary"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    opacity: newCardTitle.trim() ? 1 : 0.5,
+                    cursor: newCardTitle.trim() ? 'pointer' : 'not-allowed',
+                  }}
+                  disabled={!newCardTitle.trim()}
+                  onClick={handleAddCard}
+                >
+                  Add Card
+                </motion.button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            className="btn btn-ghost"
-            style={{ width: '100%', justifyContent: 'flex-start', fontSize: 12.5, padding: '6px 10px' }}
-            onClick={() => setShowAddCard(true)}
-          >
-            <Plus size={13} />
-            <span>Add task</span>
-          </motion.button>
-        )}
-      </div>
+          ) : (
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              className="btn btn-ghost"
+              style={{
+                width: '100%',
+                justifyContent: 'flex-start',
+                fontSize: 12.5,
+                color: 'hsl(var(--muted-foreground))',
+                padding: '6px 8px',
+              }}
+              onClick={() => setShowAddCard(true)}
+            >
+              <Plus size={13} />
+              <span>Add a card...</span>
+            </motion.button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

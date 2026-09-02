@@ -120,7 +120,7 @@ create table public.columns (
 create table public.cards (
   id text primary key default gen_random_uuid()::text,
   board_id text references public.boards(id) on delete cascade not null,
-  column_id text references public.columns(id) on delete cascade not null,
+  column_id text references public.columns(id) on delete cascade,
   title text not null,
   description text default '' not null,
   priority text default 'medium' not null, -- 'low', 'medium', 'high', 'urgent'
@@ -129,6 +129,7 @@ create table public.cards (
   due_date timestamptz,
   cover_attachment_id text,
   position integer default 0 not null,
+  is_inbox boolean default false not null,
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
 );
@@ -185,6 +186,8 @@ create table public.attachments (
 create table public.comments (
   id text primary key default gen_random_uuid()::text,
   card_id text references public.cards(id) on delete cascade not null,
+  parent_id text references public.comments(id) on delete cascade,
+  reply_to_author text,
   author text not null,
   author_initials text not null,
   avatar_color text default '#6366f1' not null,

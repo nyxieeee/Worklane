@@ -18,6 +18,7 @@ interface Props {
   accentColor: string;
   isUrgent?: boolean;
   cardDelay?: number;
+  isObserver?: boolean;
   onClick: () => void;
   onToggleComplete: (e: React.MouseEvent) => void;
   onDragStart: (e: React.DragEvent) => void;
@@ -67,7 +68,7 @@ function getPriority(card: CardType): { label: string; color: string } {
 }
 
 export default function Card({
-  card, cardIndex, colId, accentColor, isUrgent,
+  card, cardIndex, colId, accentColor, isUrgent, isObserver,
   onClick, onToggleComplete, onDragStart, onDragEnd
 }: Props) {
   const board        = useWorkStore(s => s.getActiveBoard());
@@ -109,11 +110,14 @@ export default function Card({
     <div
       className={`card ${card.completed ? 'completed' : ''}`}
       data-card-id={card.id}
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      draggable={!isObserver}
+      onDragStart={isObserver ? undefined : onDragStart}
+      onDragEnd={isObserver ? undefined : onDragEnd}
       onClick={onClick}
-      style={{ overflow: 'hidden' }}
+      style={{
+        overflow: 'hidden',
+        cursor: isObserver ? 'pointer' : 'grab',
+      }}
     >
       {/* Cover Image Thumbnail */}
       {coverAttachment && (
@@ -179,7 +183,7 @@ export default function Card({
 
       {/* Footer: Due date + counters + Assignees */}
       <div className="card-footer">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {card.dueDate && (
             <span
               className={`card-due-tag ${dueStatus === 'overdue' ? 'overdue' : dueStatus === 'due-soon' ? 'due-soon' : ''}`}
@@ -189,13 +193,27 @@ export default function Card({
             </span>
           )}
           {card.comments?.length > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>
               <MessageSquare size={11} /> {card.comments.length}
             </span>
           )}
           {card.attachments?.length > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11 }}>
-              <Paperclip size={11} /> {card.attachments.length}
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 3,
+                fontSize: 10.5,
+                fontWeight: 700,
+                padding: '1px 6px',
+                borderRadius: 5,
+                background: 'hsl(var(--primary) / 0.12)',
+                color: 'hsl(var(--primary))',
+                border: '1px solid hsl(var(--primary) / 0.25)',
+              }}
+              title="Task Guide / Attachment"
+            >
+              <Paperclip size={10.5} /> {card.attachments.length} {card.attachments.length === 1 ? 'Guide' : 'Guides'}
             </span>
           )}
         </div>

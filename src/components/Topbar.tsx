@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Bell, Users, Mail, Search, LogOut, Shield, ChevronRight, Settings } from 'lucide-react';
+import { Bell, Users, Mail, Search, LogOut, Shield, ChevronRight, Settings, Inbox } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useNotifStore } from '../store/useNotifStore';
@@ -11,6 +11,7 @@ interface Props {
   page?: 'dashboard' | 'board';
   title?: string;
   onOpenSearch: () => void;
+  onOpenInbox?: () => void;
   onManageMembers?: () => void;
   onManageEmail?: () => void;
   onOpenPrivacy: () => void;
@@ -23,6 +24,7 @@ export default function Topbar({
   page = 'board',
   title,
   onOpenSearch,
+  onOpenInbox,
   onManageMembers,
   onManageEmail,
   onOpenPrivacy,
@@ -134,7 +136,41 @@ export default function Topbar({
           </div>
         )}
 
-        {/* Action icons (Board context only) */}
+        {/* Action icons */}
+        {onOpenInbox && (
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            className="btn btn-secondary"
+            title="Inbox / Employee Concerns"
+            onClick={onOpenInbox}
+            style={{
+              padding: '4px 10px',
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              borderRadius: 8,
+            }}
+          >
+            <Inbox size={14} color="hsl(var(--primary))" />
+            <span>Inbox</span>
+            {(activeBoard?.inboxCards?.length || 0) > 0 && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '1px 5px',
+                  borderRadius: 10,
+                  backgroundColor: 'hsl(var(--primary) / 0.15)',
+                  color: 'hsl(var(--primary))',
+                }}
+              >
+                {activeBoard?.inboxCards?.length}
+              </span>
+            )}
+          </motion.button>
+        )}
+
         {page === 'board' && onManageMembers && (
           <motion.button
             whileTap={{ scale: 0.92 }}
@@ -273,6 +309,17 @@ export default function Topbar({
                     {user?.email && (
                       <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {user.email}
+                      </div>
+                    )}
+                    {board && (
+                      <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>
+                        {board.createdBy && user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim() ? (
+                          <span style={{ color: 'hsl(var(--primary))' }}>👑 Board Owner</span>
+                        ) : board.members?.find(m => m.email && m.email.toLowerCase().trim() === user?.email?.toLowerCase().trim())?.role === 'observer' ? (
+                          <span style={{ color: '#f59e0b' }}>👁️ Observer (Intern)</span>
+                        ) : (
+                          <span style={{ color: 'hsl(var(--muted-foreground))' }}>👤 Team Member</span>
+                        )}
                       </div>
                     )}
                   </div>

@@ -24,6 +24,7 @@ interface WorkState {
   leaveBoard: (boardId: string, userEmail: string) => void;
   switchBoard: (boardId: string) => void;
   syncCurrentUserProfile: (user: { name?: string; email?: string; avatarUrl?: string }) => void;
+  removeUserFromAllBoards: (userEmail: string) => void;
 
   // Visibility selector
   getVisibleBoards: (userEmail?: string) => Board[];
@@ -265,6 +266,60 @@ export const useWorkStore = create<WorkState>()(
             })
           }));
           return { boards: updatedBoards };
+        });
+      },
+
+      removeUserFromAllBoards: (userEmail: string) => {
+        if (!userEmail) return;
+        const cleanEmail = userEmail.toLowerCase().trim();
+
+        set(s => {
+          const updatedBoards = s.boards
+            .filter(b => {
+              const isCreator = b.createdBy?.toLowerCase().trim() === cleanEmail;
+              const otherMembers = (b.members || []).filter(m => m.email?.toLowerCase().trim() !== cleanEmail);
+              // If user is the solo creator and no other members, remove the board
+              return !(isCreator && otherMembers.length === 0);
+            })
+            .map(b => {
+              const userMemberIds = new Set(
+                (b.members || [])
+                  .filter(m => m.email?.toLowerCase().trim() === cleanEmail)
+                  .map(m => m.id)
+              );
+
+              if (userMemberIds.size === 0) return b;
+
+              const newMembers = (b.members || []).filter(m => !userMemberIds.has(m.id));
+              const newColumns = (b.columns || []).map(col => ({
+                ...col,
+                cards: (col.cards || []).map(c => ({
+                  ...c,
+                  assignees: (c.assignees || []).filter(a => !userMemberIds.has(a)),
+                })),
+              }));
+              const newInbox = (b.inboxCards || []).map(c => ({
+                ...c,
+                assignees: (c.assignees || []).filter(a => !userMemberIds.has(a)),
+              }));
+
+              const updatedBoard: Board = {
+                ...b,
+                members: newMembers,
+                columns: newColumns,
+                inboxCards: newInbox,
+              };
+
+              scheduleBoardSync(updatedBoard, 100);
+              return updatedBoard;
+            });
+
+          return {
+            boards: updatedBoards,
+            activeBoardId: updatedBoards.some(b => b.id === s.activeBoardId)
+              ? s.activeBoardId
+              : (updatedBoards[0]?.id || null),
+          };
         });
       },
 

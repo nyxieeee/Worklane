@@ -508,19 +508,32 @@ export const supabaseService = {
     try {
       const cleanEmail = user.email.toLowerCase().trim();
 
-      // 1. Try calling the RPC function first
+      // 1. Fetch user's board_members rows to get their IDs for card assignee cleanup
       try {
-        const { error: rpcErr } = await supabase.rpc('delete_user_account');
-        if (!rpcErr) {
-          await supabase.auth.signOut();
-          return true;
+        const { data: userMembers } = await supabase
+          .from('board_members')
+          .select('id, board_id')
+          .ilike('email', cleanEmail);
+
+        if (userMembers && userMembers.length > 0) {
+          const memberIds = userMembers.map(m => m.id);
+          // Delete from card_assignees
+          await supabase
+            .from('card_assignees')
+            .delete()
+            .in('member_id', memberIds);
+
+          // Delete from board_members
+          await supabase
+            .from('board_members')
+            .delete()
+            .in('id', memberIds);
         }
-      } catch (e) {
-        // Fallback to table deletions
+      } catch (mErr) {
+        console.warn('[SupabaseService] Member purge warning:', mErr);
       }
 
-      // 2. Fallback manual table deletions
-      // Delete from board_members
+      // Delete any remaining board_members with this email
       await supabase
         .from('board_members')
         .delete()
@@ -545,7 +558,12 @@ export const supabaseService = {
           .ilike('email', cleanEmail);
       }
 
-      // 3. Sign out auth session
+      // Try RPC if defined
+      try {
+        await supabase.rpc('delete_user_account');
+      } catch {}
+
+      // Sign out auth session
       await supabase.auth.signOut();
       return true;
     } catch (err) {

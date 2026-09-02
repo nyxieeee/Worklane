@@ -513,6 +513,15 @@ export const useAuthStore = create<AuthState>()(
         if (!user) return { success: true };
 
         try {
+          // 1. Remove user from all boards and task card assignments in work store
+          try {
+            const { useWorkStore } = await import('./useWorkStore');
+            useWorkStore.getState().removeUserFromAllBoards(user.email);
+          } catch (wErr) {
+            console.warn('[AuthStore] Error purging from work store:', wErr);
+          }
+
+          // 2. Delete from Supabase tables (board_members, card_assignees, profiles, notifications)
           if (isSupabaseConfigured()) {
             await supabaseService.deleteAccount({ id: user.id, email: user.email });
           }

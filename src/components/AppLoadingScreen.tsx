@@ -2,7 +2,6 @@
 import { motion } from "framer-motion";
 import sidebarDark from "../assets/sidebar-dark.png";
 import sidebarLight from "../assets/sidebar.png";
-import logo from "../assets/logo.png";
 
 interface AppLoadingScreenProps {
   isDark?: boolean;
@@ -25,17 +24,16 @@ export default function AppLoadingScreen({ isDark = true }: AppLoadingScreenProp
   }, []);
 
   const accent = "#6366f1";
-  const bg = isDark ? sidebarDark : sidebarLight;
-  const sub = isDark ? "#94a3b8" : "#64748b";
+  const bg = isDark ? "#0f1117" : "#f3f4f8";
+  const sub = isDark ? "#64748b" : "#94a3b8";
+  const logoSrc = isDark ? sidebarDark : sidebarLight;
 
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        backgroundImage: `url(${bg})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
+        background: bg,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -44,12 +42,18 @@ export default function AppLoadingScreen({ isDark = true }: AppLoadingScreenProp
         fontFamily: "'Inter', 'Outfit', sans-serif",
       }}
     >
-      {/* Dark overlay so content is readable */}
+      {/* Subtle glow */}
       <div
         style={{
           position: "absolute",
-          inset: 0,
-          background: isDark ? "rgba(10,11,18,0.72)" : "rgba(240,242,248,0.65)",
+          top: "40%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 500,
+          height: 500,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${accent}18 0%, transparent 70%)`,
+          pointerEvents: "none",
         }}
       />
 
@@ -65,29 +69,23 @@ export default function AppLoadingScreen({ isDark = true }: AppLoadingScreenProp
           gap: 24,
         }}
       >
-        {/* Logo image */}
+        {/* Logo image - sidebar-dark.png or sidebar.png */}
         <motion.img
-          src={logo}
+          src={logoSrc}
           alt="Worklane"
           animate={{ scale: [1, 1.04, 1] }}
           transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
           style={{
-            width: 96,
-            height: 96,
+            width: 100,
+            height: 100,
             objectFit: "contain",
-            filter: `drop-shadow(0 0 24px ${accent}80)`,
-            borderRadius: 22,
+            borderRadius: 20,
+            filter: `drop-shadow(0 0 20px ${accent}60)`,
           }}
         />
 
         {/* Subtitle */}
-        <div
-          style={{
-            fontSize: 14,
-            color: sub,
-            letterSpacing: "0.03em",
-          }}
-        >
+        <div style={{ fontSize: 14, color: sub, letterSpacing: "0.03em" }}>
           Syncing your workspace...
         </div>
 
@@ -97,7 +95,7 @@ export default function AppLoadingScreen({ isDark = true }: AppLoadingScreenProp
             width: 220,
             height: 4,
             borderRadius: 99,
-            background: "rgba(255,255,255,0.1)",
+            background: isDark ? "#ffffff12" : "#00000010",
             overflow: "hidden",
           }}
         >

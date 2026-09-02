@@ -12,6 +12,7 @@ interface WorkState {
   activeBoardId: string | null;
   lastMoveSnapshot: Board | null;
   isLoadingCloud: boolean;
+  hasLoadedOnce: boolean;
 
   // Cloud sync actions
   loadBoardsFromCloud: (userEmail: string) => Promise<void>;
@@ -156,6 +157,7 @@ export const useWorkStore = create<WorkState>()(
       activeBoardId: null,
       lastMoveSnapshot: null,
       isLoadingCloud: false,
+      hasLoadedOnce: false,
 
       // ── Cloud Sync Actions ─────────────────────────────
       loadBoardsFromCloud: async (userEmail: string) => {
@@ -207,11 +209,11 @@ export const useWorkStore = create<WorkState>()(
               ? s.activeBoardId
               : (finalBoards[0]?.id ?? null);
 
-            return { boards: finalBoards, activeBoardId, isLoadingCloud: false };
+            return { boards: finalBoards, activeBoardId, isLoadingCloud: false, hasLoadedOnce: true };
           });
         } catch (err) {
           console.warn('[useWorkStore] Cloud load error:', err);
-          set({ isLoadingCloud: false });
+          set({ isLoadingCloud: false, hasLoadedOnce: true });
         }
       },
 

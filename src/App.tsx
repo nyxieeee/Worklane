@@ -47,6 +47,7 @@ export default function App() {
   const syncCurrentUserProfile = useWorkStore(s => s.syncCurrentUserProfile);
   const loadBoardsFromCloud = useWorkStore(s => s.loadBoardsFromCloud);
   const isLoadingCloud = useWorkStore(s => s.isLoadingCloud);
+  const hasLoadedOnce = useWorkStore(s => s.hasLoadedOnce);
   const loadNotificationsFromCloud = useNotifStore(s => s.loadNotificationsFromCloud);
   const addNotification = useNotifStore(s => s.addNotification);
   const showToast = useToastStore(s => s.showToast);
@@ -501,10 +502,9 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
     );
   }
 
-  // ── Global Loading Screen (auth init + cloud fetch) ──
-  // Shown while: (1) Supabase session hasn't resolved yet, OR
-  //              (2) user is authenticated but boards are still loading from cloud
-  if (!authInitialized || (isAuthenticated && isLoadingCloud)) {
+  // ── Global Loading Screen ──
+  // (1) Auth session not yet resolved, OR (2) first cloud fetch not done yet
+  if (!authInitialized || (isAuthenticated && !hasLoadedOnce)) {
     return (
       <div className="app-layout">
         <AppLoadingScreen isDark={isDark} />

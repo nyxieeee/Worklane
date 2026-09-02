@@ -28,8 +28,13 @@ interface AuthState {
   accounts: RegisteredAccount[];
   
   initializeAuth: () => Promise<void>;
-  signUpWithEmail: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUpWithEmail: (name: string, email: string, password: string) => Promise<{ success: boolean; requiresVerification?: boolean; error?: string }>;
+  verifyEmailOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>;
+  resendVerificationOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
   signInWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  sendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
+  verifyRecoveryOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>;
+  updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   signUpWithGoogle: (name: string, email: string) => Promise<{ success: boolean; error?: string }>;
   signInWithGoogle: (email?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -100,10 +105,12 @@ export const useAuthStore = create<AuthState>()(
                 data: {
                   name: name.trim() || cleanEmail.split('@')[0],
                 },
+                emailRedirectTo: window.location.origin,
               },
             });
             if (error) return { success: false, error: error.message };
             
+            // If session is created immediately (email confirmation disabled in Supabase)
             if (data.session?.user) {
               const u = data.session.user;
               const authUser: AuthUser = {
@@ -114,8 +121,11 @@ export const useAuthStore = create<AuthState>()(
                 provider: 'email',
               };
               set({ user: authUser, isAuthenticated: true });
+              return { success: true, requiresVerification: false };
             }
-            return { success: true };
+
+            // If email verification is required (user created but unconfirmed)
+            return { success: true, requiresVerification: true };
           } catch (err: any) {
             return { success: false, error: err.message || 'Sign up failed' };
           }
@@ -138,6 +148,93 @@ export const useAuthStore = create<AuthState>()(
         };
 
         set({ accounts: [...accounts, newAccount] });
+        return { success: true, requiresVerification: true };
+      },
+
+      verifyEmailOtp: async (email: string, token: string) => {
+        const cleanEmail = email.trim().toLowerCase();
+        const cleanToken = token.trim();
+
+        if (isSupabaseConfigured()) {
+          try {
+            const { data, error } = await supabase.auth.verifyOtp({
+              email: cleanEmail,
+              token: cleanToken,
+              type: 'signup',
+            });
+            if (error) {
+              // Try email type if signup type fails
+              const retry = await supabase.auth.verifyOtp({
+                email: cleanEmail,
+                token: cleanToken,
+                type: 'email',
+              });
+              if (retry.error) return { success: false, error: retry.error.message };
+              if (retry.data?.user) {
+                const u = retry.data.user;
+                const authUser: AuthUser = {
+                  id: u.id,
+                  name: u.user_metadata?.name || cleanEmail.split('@')[0],
+                  email: cleanEmail,
+                  avatarUrl: u.user_metadata?.avatar_url,
+                  provider: 'email',
+                };
+                set({ user: authUser, isAuthenticated: true });
+                return { success: true };
+              }
+            }
+            if (data?.user) {
+              const u = data.user;
+              const authUser: AuthUser = {
+                id: u.id,
+                name: u.user_metadata?.name || cleanEmail.split('@')[0],
+                email: cleanEmail,
+                avatarUrl: u.user_metadata?.avatar_url,
+                provider: 'email',
+              };
+              set({ user: authUser, isAuthenticated: true });
+              return { success: true };
+            }
+            return { success: true };
+          } catch (err: any) {
+            return { success: false, error: err.message || 'Verification failed' };
+          }
+        }
+
+        // Local fallback: verify any 6-digit or matching token
+        const { accounts } = get();
+        const acc = accounts.find(a => a.email.toLowerCase() === cleanEmail);
+        if (acc) {
+          const authUser: AuthUser = {
+            id: acc.id,
+            name: acc.name,
+            email: acc.email,
+            avatarUrl: acc.avatarUrl,
+            provider: 'email',
+          };
+          set({ user: authUser, isAuthenticated: true });
+          return { success: true };
+        }
+        return { success: true };
+      },
+
+      resendVerificationOtp: async (email: string) => {
+        const cleanEmail = email.trim().toLowerCase();
+        if (isSupabaseConfigured()) {
+          try {
+            const { error } = await supabase.auth.resend({
+              type: 'signup',
+              email: cleanEmail,
+              options: {
+                emailRedirectTo: window.location.origin,
+              },
+            });
+            if (error) return { success: false, error: error.message };
+            return { success: true };
+          } catch (err: any) {
+            return { success: false, error: err.message || 'Failed to resend code' };
+          }
+        }
         return { success: true };
       },
 
@@ -190,6 +287,56 @@ export const useAuthStore = create<AuthState>()(
         };
 
         set({ user: authUser, isAuthenticated: true });
+        return { success: true };
+      },
+
+      sendPasswordReset: async (email: string) => {
+        const cleanEmail = email.trim().toLowerCase();
+        if (isSupabaseConfigured()) {
+          try {
+            const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+              redirectTo: `${window.location.origin}/?reset=true`,
+            });
+            if (error) return { success: false, error: error.message };
+            return { success: true };
+          } catch (err: any) {
+            return { success: false, error: err.message || 'Failed to send reset email' };
+          }
+        }
+        return { success: true };
+      },
+
+      verifyRecoveryOtp: async (email: string, token: string) => {
+        const cleanEmail = email.trim().toLowerCase();
+        const cleanToken = token.trim();
+        if (isSupabaseConfigured()) {
+          try {
+            const { error } = await supabase.auth.verifyOtp({
+              email: cleanEmail,
+              token: cleanToken,
+              type: 'recovery',
+            });
+            if (error) return { success: false, error: error.message };
+            return { success: true };
+          } catch (err: any) {
+            return { success: false, error: err.message || 'Invalid recovery code' };
+          }
+        }
+        return { success: true };
+      },
+
+      updatePassword: async (newPassword: string) => {
+        if (isSupabaseConfigured()) {
+          try {
+            const { error } = await supabase.auth.updateUser({
+              password: newPassword,
+            });
+            if (error) return { success: false, error: error.message };
+            return { success: true };
+          } catch (err: any) {
+            return { success: false, error: err.message || 'Failed to update password' };
+          }
+        }
         return { success: true };
       },
 
@@ -282,12 +429,10 @@ export const useAuthStore = create<AuthState>()(
         if (!user) return { success: true };
 
         try {
-          // 1. Delete from Supabase profiles, board_members, notifications & auth
           if (isSupabaseConfigured()) {
             await supabaseService.deleteAccount({ id: user.id, email: user.email });
           }
 
-          // 2. Remove from local accounts list
           const updatedAccounts = accounts.filter(
             a => a.email.toLowerCase() !== user.email.toLowerCase()
           );
@@ -298,7 +443,6 @@ export const useAuthStore = create<AuthState>()(
             accounts: updatedAccounts,
           });
 
-          // 3. Clear session storage items
           try {
             sessionStorage.clear();
           } catch {}

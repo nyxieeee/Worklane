@@ -166,6 +166,22 @@ export const useWorkStore = create<WorkState>()(
 
         try {
           const cloudBoards = await supabaseService.getBoardsForUser(cleanEmail);
+          
+          // If local store has boards that are not yet in the cloud, upload them to Supabase
+          const currentLocalBoards = get().boards;
+          if (currentLocalBoards && currentLocalBoards.length > 0) {
+            currentLocalBoards.forEach(localB => {
+              const isAlreadyInCloud = cloudBoards && cloudBoards.some(cb => cb.id === localB.id);
+              if (!isAlreadyInCloud) {
+                const boardToUpload: Board = {
+                  ...localB,
+                  createdBy: localB.createdBy || cleanEmail,
+                };
+                supabaseService.syncBoard(boardToUpload);
+              }
+            });
+          }
+
           if (!cloudBoards) return;
 
           set(s => {

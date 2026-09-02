@@ -251,9 +251,18 @@ export default function App() {
 
   // Keep URL search params and localStorage in sync as user navigates
   useEffect(() => {
-    if (!isAuthenticated) return;
-
     try {
+      if (!isAuthenticated) {
+        // If not logged in and not on invite/reset flow, keep the URL clean
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has('joinBoard') && !params.has('invite') && !params.has('reset') && !params.has('error')) {
+          if (window.location.search) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        }
+        return;
+      }
+
       localStorage.setItem('worklane_current_page_v1', page);
       localStorage.setItem('worklane_current_view_mode_v1', viewMode);
       if (openCardId) {
@@ -263,18 +272,18 @@ export default function App() {
       }
 
       const params = new URLSearchParams(window.location.search);
-      // Preserve invite flow params if present
-      if (!params.has('joinBoard') && !params.has('invite')) {
+      // Preserve invite and password reset flows if active
+      if (!params.has('joinBoard') && !params.has('invite') && !params.has('reset')) {
         if (page === 'dashboard') {
-          params.set('page', 'dashboard');
+          // Dashboard is the default root view - keep URL clean without ugly ?page=dashboard
+          params.delete('page');
           params.delete('board');
           params.delete('b');
           params.delete('card');
           params.delete('c');
-          if (viewMode !== 'board') params.set('view', viewMode);
-          else params.delete('view');
+          params.delete('view');
         } else if (page === 'board') {
-          params.set('page', 'board');
+          params.delete('page');
           if (activeBoardId) params.set('board', activeBoardId);
           if (viewMode !== 'board') params.set('view', viewMode);
           else params.delete('view');
@@ -288,13 +297,17 @@ export default function App() {
     } catch {}
   }, [page, activeBoardId, viewMode, openCardId, isAuthenticated]);
 
-  // When user logs out, reset to dashboard
+  // When user logs out, reset to dashboard and clean storage/URL
   useEffect(() => {
     if (!isAuthenticated) {
       setPage('dashboard');
       try {
         localStorage.setItem('worklane_current_page_v1', 'dashboard');
         localStorage.removeItem('worklane_current_card_v1');
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has('joinBoard') && !params.has('invite') && !params.has('reset') && !params.has('error')) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
       } catch {}
     }
   }, [isAuthenticated]);

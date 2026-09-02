@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { Board, Column, Card, Comment, Attachment, Member, MemberRole, Notification } from '../types';
-import { uid } from '../utils';
+import { uid, sortMembersWithOwnerFirst } from '../utils';
 
 /**
  * Service to interact with Supabase database, storage, and notifications
@@ -136,21 +136,24 @@ export const supabaseService = {
 
       // 4. Assemble domain Board structure
       const assembledBoards: Board[] = boardsData.map(b => {
-        const bMembers: Member[] = allMembers
-          .filter(m => m.board_id === b.id)
-          .map(m => {
-            const mCleanEmail = m.email ? m.email.toLowerCase().trim() : '';
-            const realProfile = profileMap.get(mCleanEmail);
+        const bMembers: Member[] = sortMembersWithOwnerFirst(
+          allMembers
+            .filter(m => m.board_id === b.id)
+            .map(m => {
+              const mCleanEmail = m.email ? m.email.toLowerCase().trim() : '';
+              const realProfile = profileMap.get(mCleanEmail);
 
-            return {
-              id: m.id,
-              name: realProfile?.name || m.name,
-              email: m.email,
-              color: m.color || '#6366f1',
-              avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
-              role: (m.role as MemberRole) || 'member',
-            };
-          });
+              return {
+                id: m.id,
+                name: realProfile?.name || m.name,
+                email: m.email,
+                color: m.color || '#6366f1',
+                avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
+                role: (m.role as MemberRole) || 'member',
+              };
+            }),
+          b.created_by
+        );
 
         const mapDbCardToCard = (card: any): Card => {
           const cardAssigneeIds = allAssignees

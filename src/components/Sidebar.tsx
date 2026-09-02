@@ -12,7 +12,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { useToastStore } from '../store/useToastStore';
 import { useConfirmStore } from '../store/useConfirmStore';
-import { avatarInitials } from '../utils';
+import { avatarInitials, sortMembersWithOwnerFirst } from '../utils';
 import sidebarImg from '../assets/sidebar.png';
 import sidebarDarkImg from '../assets/sidebar-dark.png';
 import logoImg from '../assets/logo.png';
@@ -28,19 +28,29 @@ interface Props {
   onToggleNotif: () => void;
   onFilterMember: (memberId: string | null) => void;
   filterMemberId: string | null;
-  onCreateBoard: () => void;
-  onGoToDashboard: () => void;
-  onSelectBoard: (boardId: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onGoToDashboard: () => void;
+  onCreateBoard: () => void;
+  onSelectBoard: (boardId: string) => void;
 }
 
 export default function Sidebar({
-  page, activeView, onSelectView, onOpenInbox, isInboxOpen = false,
-  onManageMembers, onOpenSettings, onToggleNotif,
-  onFilterMember, filterMemberId, onCreateBoard,
-  onGoToDashboard, onSelectBoard,
-  collapsed, onToggleCollapse,
+  page,
+  activeView,
+  onSelectView,
+  onOpenInbox,
+  isInboxOpen = false,
+  onManageMembers,
+  onOpenSettings,
+  onToggleNotif,
+  onFilterMember,
+  filterMemberId,
+  collapsed,
+  onToggleCollapse,
+  onGoToDashboard,
+  onCreateBoard,
+  onSelectBoard,
 }: Props) {
   const allBoards        = useWorkStore(s => s.boards);
   const activeBoardId    = useWorkStore(s => s.activeBoardId);
@@ -59,7 +69,10 @@ export default function Sidebar({
   const toggleTheme = useThemeStore(s => s.toggle);
 
   const activeBoard = useMemo(() => allBoards.find(b => b.id === activeBoardId), [allBoards, activeBoardId]);
-  const teamMembers = activeBoard?.members ?? [];
+  const teamMembers = useMemo(
+    () => sortMembersWithOwnerFirst(activeBoard?.members ?? [], activeBoard?.createdBy),
+    [activeBoard?.members, activeBoard?.createdBy]
+  );
 
   // ── Collapsed Sidebar ──
   if (collapsed) {

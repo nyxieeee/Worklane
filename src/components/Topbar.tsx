@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useNotifStore } from '../store/useNotifStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { avatarInitials } from '../utils';
+import { avatarInitials, sortMembersWithOwnerFirst } from '../utils';
 import type { Member } from '../types';
 
 interface Props {
@@ -50,7 +50,7 @@ export default function Topbar({
 
   // If on dashboard, aggregate distinct members across all boards
   const members: Member[] = useMemo(() => {
-    if (board) return board.members || [];
+    if (board) return sortMembersWithOwnerFirst(board.members || [], board.createdBy);
     const map = new Map<string, Member>();
     boards.forEach(b => {
       (b.members || []).forEach(m => {

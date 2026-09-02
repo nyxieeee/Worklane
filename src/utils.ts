@@ -75,3 +75,30 @@ export function isImageFile(name: string): boolean {
   const ext = (name || '').split('.').pop()?.toLowerCase() ?? '';
   return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext);
 }
+
+/**
+ * Deterministically sorts board members with the Board Owner fixed at the top,
+ * followed by alphabetical order of members' display names.
+ */
+export function sortMembersWithOwnerFirst<T extends { email?: string; role?: string; name?: string }>(
+  members: T[],
+  createdByEmail?: string
+): T[] {
+  if (!members || members.length === 0) return [];
+  const cleanCreatedBy = createdByEmail ? createdByEmail.toLowerCase().trim() : '';
+
+  return [...members].sort((a, b) => {
+    const aEmail = (a.email || '').toLowerCase().trim();
+    const bEmail = (b.email || '').toLowerCase().trim();
+
+    const aIsOwner = (cleanCreatedBy && aEmail === cleanCreatedBy) || a.role === 'owner';
+    const bIsOwner = (cleanCreatedBy && bEmail === cleanCreatedBy) || b.role === 'owner';
+
+    if (aIsOwner && !bIsOwner) return -1;
+    if (!aIsOwner && bIsOwner) return 1;
+
+    const aName = a.name || aEmail;
+    const bName = b.name || bEmail;
+    return aName.localeCompare(bName);
+  });
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye,
   Crown, Info, Lock, Search, Link2, Copy, Check, Sparkles,
@@ -11,9 +11,9 @@ import { useConfirmStore } from '../store/useConfirmStore';
 import { useNotifStore } from '../store/useNotifStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useEmailStore } from '../store/useEmailStore';
-import { avatarInitials, uid } from '../utils';
+import { avatarInitials, sortMembersWithOwnerFirst, uid } from '../utils';
 import { NeumorphicSelect, SelectOption } from './ui/NeumorphicSelect';
-import { MemberRole } from '../types';
+import { Member, MemberRole } from '../types';
 import { supabaseService } from '../services/supabaseService';
 
 interface Props {
@@ -66,9 +66,12 @@ export default function MembersModal({ onClose }: Props) {
 
   const updateMemberRole = useWorkStore(s => s.updateMemberRole);
 
-  if (!board) return null;
+  const members = useMemo(
+    () => sortMembersWithOwnerFirst(board?.members || [], board?.createdBy),
+    [board?.members, board?.createdBy]
+  );
 
-  const members = board.members || [];
+  if (!board) return null;
   const currentEmail = currentUser?.email?.toLowerCase().trim();
   const isOwner = !!(board.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail);
   const currentMemberObj = members.find(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);

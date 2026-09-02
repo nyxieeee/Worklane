@@ -13,7 +13,7 @@ import { useConfirmStore } from '../store/useConfirmStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { LABELS, type Attachment, type Comment } from '../types';
-import { avatarInitials, formatBytes, formatTime, uid, truncateFileName } from '../utils';
+import { avatarInitials, formatBytes, formatTime, uid, truncateFileName, sortMembersWithOwnerFirst } from '../utils';
 import NeumorphicDatePicker from './ui/NeumorphicDatePicker';
 
 interface Props {
@@ -104,7 +104,10 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   if (!cardId || !result) return null;
 
   const { card, column, board, isInbox } = result;
-  const members = board.members || [];
+  const members = useMemo(
+    () => sortMembersWithOwnerFirst(board.members || [], board.createdBy),
+    [board.members, board.createdBy]
+  );
   const allLabels = [...LABELS, ...customLabels];
 
   const currentEmail = currentUser?.email?.toLowerCase().trim();

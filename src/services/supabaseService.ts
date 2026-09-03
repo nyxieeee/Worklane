@@ -37,12 +37,11 @@ export const supabaseService = {
         console.warn('[SupabaseService] Upsert profile warning:', error);
       }
 
-      // Also propagate avatar_url and border_style across all board_members records for this user
-      if (user.avatarUrl || user.name || user.borderStyle) {
+      // Also propagate avatar_url and name across all board_members records for this user (never border_style, which is board-specific)
+      if (user.avatarUrl || user.name) {
         const updates: any = {};
         if (user.avatarUrl) updates.avatar_url = user.avatarUrl;
         if (user.name) updates.name = user.name;
-        if (user.borderStyle !== undefined) updates.border_style = user.borderStyle || 'none';
         await supabase.from('board_members').update(updates).ilike('email', cleanEmail);
       }
 
@@ -157,7 +156,7 @@ export const supabaseService = {
                 role: (m.role as MemberRole) || 'member',
                 borderStyle: (m.border_style !== undefined && m.border_style !== null)
                   ? m.border_style
-                  : (realProfile?.border_style || 'none'),
+                  : 'none',
               };
             }),
           b.created_by
@@ -523,7 +522,7 @@ export const supabaseService = {
           color: member.color || '#6366f1',
           avatar_url: finalAvatar,
           role: member.role || 'member',
-          border_style: member.borderStyle || prof?.border_style || 'none',
+          border_style: member.borderStyle || 'none',
         };
         if (finalUserId) updatePayload.user_id = finalUserId;
         await supabase
@@ -540,7 +539,7 @@ export const supabaseService = {
           color: member.color || '#6366f1',
           avatar_url: finalAvatar,
           role: member.role || 'member',
-          border_style: member.borderStyle || prof?.border_style || 'none',
+          border_style: member.borderStyle || 'none',
         };
         if (finalUserId) insertPayload.user_id = finalUserId;
 
@@ -700,9 +699,9 @@ export const supabaseService = {
             color: m.color || '#6366f1',
             avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
             role: (m.role as MemberRole) || 'member',
-            borderStyle: (m.border_style && m.border_style !== 'none')
+            borderStyle: (m.border_style !== undefined && m.border_style !== null)
               ? m.border_style
-              : (realProfile?.border_style && realProfile.border_style !== 'none' ? realProfile.border_style : (m.border_style || 'none')),
+              : 'none',
           };
         }),
         b.created_by
@@ -937,13 +936,10 @@ export const supabaseService = {
       const styleVal = borderStyle || 'none';
 
       if (memberId) {
-        await supabase.from('board_members').update({ border_style: styleVal }).eq('id', memberId);
+        await supabase.from('board_members').update({ border_style: styleVal }).eq('id', memberId).eq('board_id', boardId);
       }
       if (cleanEmail) {
         await supabase.from('board_members').update({ border_style: styleVal }).eq('board_id', boardId).ilike('email', cleanEmail);
-        try {
-          await supabase.from('profiles').update({ border_style: styleVal }).ilike('email', cleanEmail);
-        } catch {}
       }
 
       try {

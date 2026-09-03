@@ -102,35 +102,45 @@ export interface EmailSettings {
 export interface BorderPreset {
   key: string;
   label: string;
-  group: 'it' | 'general';
+  group: 'tech' | 'work' | 'none';
+  badgeText?: string;
   /** CSS gradient/color string for the border ring */
   gradient: string;
-  /** Optional: animated (e.g. rainbow) */
+  /** Optional: animated */
   animated?: boolean;
 }
 
+export interface CustomBorderDef {
+  id: string;
+  label: string;
+  badgeText: string;
+  color: string;
+  gradient?: string;
+  styleType: 'gradient' | 'solid' | 'glow' | 'dashed';
+}
+
 export const BORDER_PRESETS: BorderPreset[] = [
-  // ── IT / Tech Roles ──────────────────────────────────────────────────
-  { key: 'frontend',  label: 'Frontend Dev',  group: 'it',      gradient: 'linear-gradient(135deg, #0ea5e9, #06b6d4, #38bdf8)' },
-  { key: 'backend',   label: 'Backend Dev',   group: 'it',      gradient: 'linear-gradient(135deg, #f97316, #fb923c, #f59e0b)' },
-  { key: 'devops',    label: 'DevOps / Cloud', group: 'it',     gradient: 'linear-gradient(135deg, #10b981, #14b8a6, #34d399)' },
-  { key: 'designer',  label: 'UI/UX Designer', group: 'it',     gradient: 'linear-gradient(135deg, #ec4899, #f43f5e, #fb7185)' },
-  { key: 'qa',        label: 'QA / Testing',  group: 'it',      gradient: 'linear-gradient(135deg, #8b5cf6, #6366f1, #a78bfa)' },
-  { key: 'fullstack', label: 'Full-Stack Dev', group: 'it',     gradient: 'linear-gradient(135deg, #6366f1, #0ea5e9, #10b981, #f59e0b)' },
-  { key: 'mobile',    label: 'Mobile Dev',    group: 'it',      gradient: 'linear-gradient(135deg, #f59e0b, #eab308, #fbbf24)' },
-  { key: 'data',      label: 'Data / ML',     group: 'it',      gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6, #d946ef)' },
-  // ── General ───────────────────────────────────────────────────────────
-  { key: 'none',      label: 'No Border',     group: 'general', gradient: 'none' },
-  { key: 'solid',     label: 'Classic',       group: 'general', gradient: 'hsl(var(--primary))' },
-  { key: 'gold',      label: 'Gold ✦',        group: 'general', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24, #d97706)' },
-  { key: 'silver',    label: 'Silver',        group: 'general', gradient: 'linear-gradient(135deg, #94a3b8, #cbd5e1, #64748b)' },
-  { key: 'rose',      label: 'Rose',          group: 'general', gradient: 'linear-gradient(135deg, #f43f5e, #fb7185, #fda4af)' },
-  { key: 'ocean',     label: 'Ocean',         group: 'general', gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8, #0284c7)' },
-  { key: 'forest',    label: 'Forest',        group: 'general', gradient: 'linear-gradient(135deg, #16a34a, #22c55e, #15803d)' },
-  { key: 'sunset',    label: 'Sunset',        group: 'general', gradient: 'linear-gradient(135deg, #f97316, #ef4444, #ec4899)' },
-  { key: 'rainbow',   label: 'Rainbow 🌈',    group: 'general', gradient: 'linear-gradient(135deg, #f43f5e, #f97316, #f59e0b, #10b981, #0ea5e9, #8b5cf6)', animated: true },
-  { key: 'glow',      label: 'Neon Glow',     group: 'general', gradient: 'hsl(var(--primary))' },
-  { key: 'dashed',    label: 'Dashed',        group: 'general', gradient: 'hsl(var(--primary))' },
+  // ── Engineering & Tech Roles ──────────────────────────────────────────
+  { key: 'frontend',  label: 'Frontend Dev',      group: 'tech', badgeText: 'FE',     gradient: 'linear-gradient(135deg, #0ea5e9, #06b6d4, #38bdf8)' },
+  { key: 'backend',   label: 'Backend Dev',       group: 'tech', badgeText: 'BE',     gradient: 'linear-gradient(135deg, #f97316, #fb923c, #f59e0b)' },
+  { key: 'fullstack', label: 'Full-Stack Dev',    group: 'tech', badgeText: 'FS',     gradient: 'linear-gradient(135deg, #6366f1, #0ea5e9, #10b981, #f59e0b)' },
+  { key: 'devops',    label: 'DevOps / Cloud',    group: 'tech', badgeText: 'DevOps', gradient: 'linear-gradient(135deg, #10b981, #14b8a6, #34d399)' },
+  { key: 'mobile',    label: 'Mobile Dev',        group: 'tech', badgeText: 'Mobile', gradient: 'linear-gradient(135deg, #f59e0b, #eab308, #fbbf24)' },
+  { key: 'qa',        label: 'QA / Testing',      group: 'tech', badgeText: 'QA',     gradient: 'linear-gradient(135deg, #8b5cf6, #6366f1, #a78bfa)' },
+  { key: 'data',      label: 'Data / AI / ML',    group: 'tech', badgeText: 'Data',   gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6, #d946ef)' },
+  { key: 'security',  label: 'SecOps / Security', group: 'tech', badgeText: 'SecOps', gradient: 'linear-gradient(135deg, #ef4444, #f87171, #dc2626)' },
+
+  // ── Workplace & Product Roles ───────────────────────────────────────────
+  { key: 'designer',  label: 'UI/UX Design',       group: 'work', badgeText: 'UI/UX',  gradient: 'linear-gradient(135deg, #ec4899, #f43f5e, #fb7185)' },
+  { key: 'pm',        label: 'Product Manager',    group: 'work', badgeText: 'PM',     gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24, #d97706)' },
+  { key: 'scrum',     label: 'Scrum Master',       group: 'work', badgeText: 'Scrum',  gradient: 'linear-gradient(135deg, #06b6d4, #22d3ee, #0891b2)' },
+  { key: 'techlead',  label: 'Tech Lead',          group: 'work', badgeText: 'Lead',   gradient: 'linear-gradient(135deg, #eab308, #facc15, #ca8a04)' },
+  { key: 'analyst',   label: 'Business Analyst',   group: 'work', badgeText: 'BA',     gradient: 'linear-gradient(135deg, #10b981, #34d399, #059669)' },
+  { key: 'marketing', label: 'Growth / Marketing', group: 'work', badgeText: 'Growth', gradient: 'linear-gradient(135deg, #d946ef, #e879f9, #c026d3)' },
+  { key: 'support',   label: 'IT / Operations',    group: 'work', badgeText: 'Ops',    gradient: 'linear-gradient(135deg, #64748b, #94a3b8, #475569)' },
+
+  // ── Default ───────────────────────────────────────────────────────────
+  { key: 'none',      label: 'No Role / Border',   group: 'none', gradient: 'none' },
 ];
 
 // ── Constants ──────────────────────────────────────────────────────────

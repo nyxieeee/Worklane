@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye,
   Crown, Info, Lock, Search, Link2, Copy, Check, Sparkles,
-  UserCheck, Loader2, Mail, Palette, Globe, Server, Cpu, Users, Layers, Plus
+  UserCheck, Loader2, Mail, Palette, Globe, Server, Cpu, Users, Plus, Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -70,9 +70,8 @@ export default function MembersModal({ onClose }: Props) {
   const [borderPickerMemberId, setBorderPickerMemberId] = useState<string | null>(null);
   const [pendingBorderStyle, setPendingBorderStyle] = useState<string>('none');
 
-  // Team Filtering & Grouping
-  const [teamFilter, setTeamFilter] = useState<'all' | 'frontend' | 'backend' | 'tech' | 'general'>('all');
-  const [groupByTeam, setGroupByTeam] = useState<boolean>(true);
+  // Team Filtering
+  const [teamFilter, setTeamFilter] = useState<'all' | 'frontend' | 'backend' | 'work'>('all');
   const [addTeamRole, setAddTeamRole] = useState<'none' | 'frontend' | 'backend'>('none');
 
   const searchTimeoutRef = useRef<number | undefined>(undefined);
@@ -86,8 +85,7 @@ export default function MembersModal({ onClose }: Props) {
 
   const frontendMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'frontend'), [members]);
   const backendMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'backend'), [members]);
-  const techMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'tech'), [members]);
-  const generalMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'general'), [members]);
+  const workMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'work'), [members]);
 
   if (!board) return null;
   const currentEmail = currentUser?.email?.toLowerCase().trim();
@@ -323,7 +321,6 @@ export default function MembersModal({ onClose }: Props) {
                   }}
                   title={(isOwner || isCurrent) ? 'Click to change team role' : undefined}
                 >
-                  <span>{badge.icon}</span>
                   <span>{badge.label}</span>
                   {(isOwner || isCurrent) && <span style={{ fontSize: 8, opacity: 0.7 }}>▾</span>}
                 </button>
@@ -525,9 +522,6 @@ export default function MembersModal({ onClose }: Props) {
                   onChange={(newStyle) => {
                     setPendingBorderStyle(newStyle);
                     updateMember(member.id, { borderStyle: newStyle });
-                    if (isCurrent) {
-                      useAuthStore.getState().updateUserProfile({ borderStyle: newStyle });
-                    }
                     const preset = BORDER_PRESETS.find(p => p.key === newStyle);
                     const label = preset?.label || newStyle;
                     showToast(
@@ -582,269 +576,212 @@ export default function MembersModal({ onClose }: Props) {
           {/* Team Filter / Navigation Pills */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                <button
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <motion.button
+                  whileHover={{ scale: 1.03, y: -1 }}
+                  whileTap={{ scale: 0.94 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                   type="button"
                   style={{
-                    padding: '4px 10px',
+                    padding: '5px 11px',
                     fontSize: 11,
                     fontWeight: 600,
                     borderRadius: 8,
                     cursor: 'pointer',
                     border: teamFilter === 'all' ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
-                    backgroundColor: teamFilter === 'all' ? 'hsl(var(--primary) / 0.12)' : 'hsl(var(--card))',
+                    backgroundColor: teamFilter === 'all' ? 'hsl(var(--primary) / 0.14)' : 'hsl(var(--card))',
                     color: teamFilter === 'all' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
+                    boxShadow: teamFilter === 'all' ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
                     display: 'flex', alignItems: 'center', gap: 5,
-                    transition: 'all 0.15s ease'
+                    transition: 'border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
                   }}
                   onClick={() => setTeamFilter('all')}
                 >
                   <Users size={12} />
                   <span>All ({members.length})</span>
-                </button>
+                </motion.button>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.03, y: -1 }}
+                  whileTap={{ scale: 0.94 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                   type="button"
                   style={{
-                    padding: '4px 10px',
+                    padding: '5px 11px',
                     fontSize: 11,
                     fontWeight: 600,
                     borderRadius: 8,
                     cursor: 'pointer',
                     border: teamFilter === 'frontend' ? '1.5px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.35)',
-                    backgroundColor: teamFilter === 'frontend' ? 'rgba(14, 165, 233, 0.15)' : 'hsl(var(--card))',
+                    backgroundColor: teamFilter === 'frontend' ? 'rgba(14, 165, 233, 0.18)' : 'hsl(var(--card))',
                     color: '#0284c7',
+                    boxShadow: teamFilter === 'frontend' ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
                     display: 'flex', alignItems: 'center', gap: 5,
-                    transition: 'all 0.15s ease'
+                    transition: 'border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
                   }}
                   onClick={() => setTeamFilter('frontend')}
                 >
                   <Globe size={12} />
                   <span>Frontend ({frontendMembers.length})</span>
-                </button>
+                </motion.button>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.03, y: -1 }}
+                  whileTap={{ scale: 0.94 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                   type="button"
                   style={{
-                    padding: '4px 10px',
+                    padding: '5px 11px',
                     fontSize: 11,
                     fontWeight: 600,
                     borderRadius: 8,
                     cursor: 'pointer',
                     border: teamFilter === 'backend' ? '1.5px solid #ea580c' : '1px solid rgba(249, 115, 22, 0.35)',
-                    backgroundColor: teamFilter === 'backend' ? 'rgba(249, 115, 22, 0.15)' : 'hsl(var(--card))',
+                    backgroundColor: teamFilter === 'backend' ? 'rgba(249, 115, 22, 0.18)' : 'hsl(var(--card))',
                     color: '#ea580c',
+                    boxShadow: teamFilter === 'backend' ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
                     display: 'flex', alignItems: 'center', gap: 5,
-                    transition: 'all 0.15s ease'
+                    transition: 'border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
                   }}
                   onClick={() => setTeamFilter('backend')}
                 >
                   <Server size={12} />
                   <span>Backend ({backendMembers.length})</span>
-                </button>
+                </motion.button>
 
-                {techMembers.length > 0 && (
-                  <button
-                    type="button"
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      border: teamFilter === 'tech' ? '1.5px solid #7c3aed' : '1px solid rgba(124, 58, 237, 0.35)',
-                      backgroundColor: teamFilter === 'tech' ? 'rgba(124, 58, 237, 0.15)' : 'hsl(var(--card))',
-                      color: '#7c3aed',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      transition: 'all 0.15s ease'
-                    }}
-                    onClick={() => setTeamFilter('tech')}
-                  >
-                    <Cpu size={12} />
-                    <span>Other Tech ({techMembers.length})</span>
-                  </button>
-                )}
-
-                {generalMembers.length > 0 && (
-                  <button
-                    type="button"
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      borderRadius: 8,
-                      cursor: 'pointer',
-                      border: teamFilter === 'general' ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
-                      backgroundColor: teamFilter === 'general' ? 'hsl(var(--primary) / 0.12)' : 'hsl(var(--card))',
-                      color: teamFilter === 'general' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      transition: 'all 0.15s ease'
-                    }}
-                    onClick={() => setTeamFilter('general')}
-                  >
-                    <span>General ({generalMembers.length})</span>
-                  </button>
-                )}
-              </div>
-
-              {teamFilter === 'all' && (
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.03, y: -1 }}
+                  whileTap={{ scale: 0.94 }}
+                  transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                   type="button"
-                  onClick={() => setGroupByTeam(v => !v)}
                   style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
+                    padding: '5px 11px',
                     fontSize: 11,
-                    color: 'hsl(var(--primary))',
                     fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    border: teamFilter === 'work' ? '1.5px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
+                    backgroundColor: teamFilter === 'work' ? 'rgba(139, 92, 246, 0.18)' : 'hsl(var(--card))',
+                    color: '#8b5cf6',
+                    boxShadow: teamFilter === 'work' ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
                   }}
-                  title="Toggle team sections"
+                  onClick={() => setTeamFilter('work')}
                 >
-                  <Layers size={12} />
-                  <span>{groupByTeam ? 'Grouped by Team' : 'Flat List'}</span>
-                </button>
-              )}
+                  <Briefcase size={12} />
+                  <span>Work Related ({workMembers.length})</span>
+                </motion.button>
+              </div>
             </div>
           </div>
 
           {/* Current Members List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {members.length === 0 ? (
-              <div style={{ padding: '16px', textAlign: 'center', color: 'hsl(var(--muted-foreground))', fontSize: 13 }}>
-                No members found
-              </div>
-            ) : teamFilter === 'frontend' ? (
-              frontendMembers.length === 0 ? (
-                <div style={{
-                  padding: '24px 16px', textAlign: 'center', borderRadius: 12,
-                  backgroundColor: 'rgba(14, 165, 233, 0.05)', border: '1px dashed rgba(14, 165, 233, 0.3)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6
-                }}>
-                  <Globe size={24} style={{ color: '#0284c7' }} />
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Frontend Members Yet</div>
-                  <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
-                    Switch to "All", then click the 🎨 palette icon on any member to set their profile border to <strong>Frontend Dev</strong>.
-                  </div>
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ fontSize: 11.5, padding: '5px 14px', marginTop: 4 }}
-                    onClick={() => setTeamFilter('all')}
-                  >
-                    View All Members ({members.length})
-                  </motion.button>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={teamFilter}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+            >
+              {members.length === 0 ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'hsl(var(--muted-foreground))', fontSize: 13 }}>
+                  No members found
                 </div>
+              ) : teamFilter === 'frontend' ? (
+                frontendMembers.length === 0 ? (
+                  <div style={{
+                    padding: '24px 16px', textAlign: 'center', borderRadius: 12,
+                    backgroundColor: 'rgba(14, 165, 233, 0.05)', border: '1px dashed rgba(14, 165, 233, 0.3)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6
+                  }}>
+                    <Globe size={24} style={{ color: '#0284c7' }} />
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Frontend Members Yet</div>
+                    <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
+                      Switch to "All", then click the palette icon on any member to set their profile border to <strong>Frontend Dev</strong>.
+                    </div>
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      whileHover={{ scale: 1.03 }}
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11.5, padding: '5px 14px', marginTop: 4 }}
+                      onClick={() => setTeamFilter('all')}
+                    >
+                      View All Members ({members.length})
+                    </motion.button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {frontendMembers.map(renderMemberItem)}
+                  </div>
+                )
+              ) : teamFilter === 'backend' ? (
+                backendMembers.length === 0 ? (
+                  <div style={{
+                    padding: '24px 16px', textAlign: 'center', borderRadius: 12,
+                    backgroundColor: 'rgba(249, 115, 22, 0.05)', border: '1px dashed rgba(249, 115, 22, 0.3)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6
+                  }}>
+                    <Server size={24} style={{ color: '#ea580c' }} />
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Backend Members Yet</div>
+                    <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
+                      Switch to "All", then click the palette icon on any member to set their profile border to <strong>Backend Dev</strong>.
+                    </div>
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      whileHover={{ scale: 1.03 }}
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11.5, padding: '5px 14px', marginTop: 4 }}
+                      onClick={() => setTeamFilter('all')}
+                    >
+                      View All Members ({members.length})
+                    </motion.button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {backendMembers.map(renderMemberItem)}
+                  </div>
+                )
+              ) : teamFilter === 'work' ? (
+                workMembers.length === 0 ? (
+                  <div style={{
+                    padding: '24px 16px', textAlign: 'center', borderRadius: 12,
+                    backgroundColor: 'rgba(139, 92, 246, 0.05)', border: '1px dashed rgba(139, 92, 246, 0.3)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6
+                  }}>
+                    <Briefcase size={24} style={{ color: '#8b5cf6' }} />
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Work-Related or Custom Roles Yet</div>
+                    <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
+                      Click the palette icon on any member to assign an Engineering, Product, or Custom role & badge.
+                    </div>
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      whileHover={{ scale: 1.03 }}
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11.5, padding: '5px 14px', marginTop: 4 }}
+                      onClick={() => setTeamFilter('all')}
+                    >
+                      View All Members ({members.length})
+                    </motion.button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {workMembers.map(renderMemberItem)}
+                  </div>
+                )
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {frontendMembers.map(renderMemberItem)}
+                /* All Members List */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'visible' }}>
+                  {members.map(renderMemberItem)}
                 </div>
-              )
-            ) : teamFilter === 'backend' ? (
-              backendMembers.length === 0 ? (
-                <div style={{
-                  padding: '24px 16px', textAlign: 'center', borderRadius: 12,
-                  backgroundColor: 'rgba(249, 115, 22, 0.05)', border: '1px dashed rgba(249, 115, 22, 0.3)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6
-                }}>
-                  <Server size={24} style={{ color: '#ea580c' }} />
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Backend Members Yet</div>
-                  <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
-                    Switch to "All", then click the 🎨 palette icon on any member to set their profile border to <strong>Backend Dev</strong>.
-                  </div>
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ fontSize: 11.5, padding: '5px 14px', marginTop: 4 }}
-                    onClick={() => setTeamFilter('all')}
-                  >
-                    View All Members ({members.length})
-                  </motion.button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {backendMembers.map(renderMemberItem)}
-                </div>
-              )
-            ) : teamFilter === 'tech' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {techMembers.map(renderMemberItem)}
-              </div>
-            ) : teamFilter === 'general' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {generalMembers.map(renderMemberItem)}
-              </div>
-            ) : groupByTeam ? (
-              /* Grouped by Team View */
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {frontendMembers.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{
-                      fontSize: 11.5, fontWeight: 700, color: '#0284c7',
-                      display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em', textTransform: 'uppercase'
-                    }}>
-                      <Globe size={12} /> Frontend Team ({frontendMembers.length})
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {frontendMembers.map(renderMemberItem)}
-                    </div>
-                  </div>
-                )}
-
-                {backendMembers.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{
-                      fontSize: 11.5, fontWeight: 700, color: '#ea580c',
-                      display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em', textTransform: 'uppercase'
-                    }}>
-                      <Server size={12} /> Backend Team ({backendMembers.length})
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {backendMembers.map(renderMemberItem)}
-                    </div>
-                  </div>
-                )}
-
-                {techMembers.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{
-                      fontSize: 11.5, fontWeight: 700, color: '#7c3aed',
-                      display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em', textTransform: 'uppercase'
-                    }}>
-                      <Cpu size={12} /> Other Tech Roles ({techMembers.length})
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {techMembers.map(renderMemberItem)}
-                    </div>
-                  </div>
-                )}
-
-                {generalMembers.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{
-                      fontSize: 11.5, fontWeight: 700, color: 'hsl(var(--muted-foreground))',
-                      display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em', textTransform: 'uppercase'
-                    }}>
-                      <Users size={12} /> General & Other Members ({generalMembers.length})
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {generalMembers.map(renderMemberItem)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Flat List */
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'visible' }}>
-                {members.map(renderMemberItem)}
-              </div>
-            )}
-          </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
 
 
 

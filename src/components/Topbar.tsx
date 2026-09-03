@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Bell, Users, Mail, Search, LogOut, Shield, ChevronRight, Settings, Inbox, Crown, Eye, User, Pencil, Check, X } from 'lucide-react';
+import { Bell, Users, Mail, Search, LogOut, Shield, ChevronRight, Settings, Inbox, Crown, Eye, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useNotifStore } from '../store/useNotifStore';
@@ -49,36 +49,6 @@ export default function Topbar({
   const [userDropOpen, setUserDropOpen] = useState(false);
   const chipRef = useRef<HTMLDivElement>(null);
 
-  // Board rename state
-  const renameBoard = useWorkStore(s => s.renameBoard);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editTitleValue, setEditTitleValue] = useState(board?.name || '');
-  const titleInputRef = useRef<HTMLInputElement>(null);
-
-  const currentEmail = user?.email?.toLowerCase().trim();
-  const currentMember = board?.members?.find(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
-  const isObserver = currentMember?.role === 'observer';
-
-  useEffect(() => {
-    if (board?.name) {
-      setEditTitleValue(board.name);
-    }
-  }, [board?.name]);
-
-  useEffect(() => {
-    if (isEditingTitle) {
-      titleInputRef.current?.focus();
-      titleInputRef.current?.select();
-    }
-  }, [isEditingTitle]);
-
-  const handleSaveTitle = () => {
-    if (board && editTitleValue.trim() && editTitleValue.trim() !== board.name) {
-      renameBoard(board.id, editTitleValue.trim());
-    }
-    setIsEditingTitle(false);
-  };
-
   // If on dashboard, aggregate distinct members across all boards
   const members: Member[] = useMemo(() => {
     if (board) return sortMembersWithOwnerFirst(board.members || [], board.createdBy);
@@ -112,97 +82,9 @@ export default function Topbar({
           <span className="topbar-crumb-root">Workspace</span>
           <ChevronRight size={13} className="topbar-crumb-sep" />
           {page === 'board' && board ? (
-            isEditingTitle ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input
-                  ref={titleInputRef}
-                  type="text"
-                  value={editTitleValue}
-                  onChange={e => setEditTitleValue(e.target.value)}
-                  onBlur={handleSaveTitle}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleSaveTitle();
-                    if (e.key === 'Escape') {
-                      setEditTitleValue(board.name);
-                      setIsEditingTitle(false);
-                    }
-                  }}
-                  className="text-input"
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    padding: '2px 8px',
-                    height: 28,
-                    borderRadius: 6,
-                    minWidth: 140,
-                    maxWidth: 240,
-                  }}
-                />
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  type="button"
-                  className="icon-btn"
-                  onMouseDown={e => {
-                    e.preventDefault();
-                    handleSaveTitle();
-                  }}
-                  title="Save board name"
-                  style={{ width: 24, height: 24, color: 'hsl(var(--primary))' }}
-                >
-                  <Check size={13} />
-                </motion.button>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  type="button"
-                  className="icon-btn"
-                  onMouseDown={e => {
-                    e.preventDefault();
-                    setEditTitleValue(board.name);
-                    setIsEditingTitle(false);
-                  }}
-                  title="Cancel"
-                  style={{ width: 24, height: 24 }}
-                >
-                  <X size={13} />
-                </motion.button>
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  cursor: !isObserver ? 'pointer' : 'default',
-                  padding: '2px 6px',
-                  borderRadius: 6,
-                  transition: 'background-color 0.15s ease',
-                }}
-                className={!isObserver ? 'hover-bg-surface' : ''}
-                onClick={() => {
-                  if (!isObserver) {
-                    setEditTitleValue(board.name);
-                    setIsEditingTitle(true);
-                  }
-                }}
-                title={!isObserver ? 'Click to rename board' : undefined}
-              >
-                <span className="topbar-crumb-active">
-                  {board.name}
-                </span>
-                {!isObserver && (
-                  <span
-                    style={{
-                      opacity: 0.6,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Pencil size={11} />
-                  </span>
-                )}
-              </div>
-            )
+            <span className="topbar-crumb-active">
+              {board.name}
+            </span>
           ) : (
             <span className="topbar-crumb-active">
               {title || 'Overview'}

@@ -121,7 +121,6 @@ export default function Card({
       onDragEnd={isObserver ? undefined : onDragEnd}
       onClick={onClick}
       style={{
-        overflow: 'hidden',
         cursor: isObserver ? 'pointer' : 'grab',
       }}
     >

@@ -293,7 +293,6 @@ export const useWorkStore = create<WorkState>()(
                   ...m,
                   name: fullName,
                   avatarUrl: user.avatarUrl || m.avatarUrl,
-                  borderStyle: user.borderStyle !== undefined ? user.borderStyle : m.borderStyle,
                 };
               }
               return m;

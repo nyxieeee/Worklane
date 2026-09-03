@@ -555,7 +555,7 @@ export default function BoardArea({
                   delay: idx * 0.04,
                   ease: [0.25, 1, 0.5, 1]
                 }}
-                style={{ height: '100%', minHeight: 0, flexShrink: 0, display: 'flex', flexDirection: 'column', transformStyle: 'preserve-3d' }}
+                style={{ maxHeight: '100%', minHeight: 0, flexShrink: 0, display: 'flex', flexDirection: 'column', transformStyle: 'preserve-3d' }}
               >
                 <Column
                   col={col}

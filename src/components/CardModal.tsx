@@ -4,7 +4,7 @@ import {
   Trash2, CheckSquare, Square, Download, X, Send, Plus, Check,
   Eye, Image as ImageIcon, Maximize2, AtSign, Reply, Sparkles,
   FileSpreadsheet, FileText, FileCode, FileArchive, File, Lock,
-  Edit3, Crown, Shield, Save, Loader2, Globe, Server, Cpu
+  Edit3, Crown, Shield, Save, Loader2, Globe, Server, Cpu, Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -131,18 +131,18 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const [isSaving, setIsSaving] = useState(false);
 
   // Assignee team filter state
-  const [assigneeTeamFilter, setAssigneeTeamFilter] = useState<'all' | 'frontend' | 'backend' | 'tech'>('all');
+  const [assigneeTeamFilter, setAssigneeTeamFilter] = useState<'all' | 'frontend' | 'backend' | 'work'>('all');
 
   const feAssignees = useMemo(() => members.filter((m: Member) => getMemberTeamCategory(m.borderStyle) === 'frontend'), [members]);
   const beAssignees = useMemo(() => members.filter((m: Member) => getMemberTeamCategory(m.borderStyle) === 'backend'), [members]);
-  const techAssignees = useMemo(() => members.filter((m: Member) => getMemberTeamCategory(m.borderStyle) === 'tech'), [members]);
+  const workAssignees = useMemo(() => members.filter((m: Member) => getMemberTeamCategory(m.borderStyle) === 'work'), [members]);
 
   const filteredAssigneeMembers = useMemo(() => {
     if (assigneeTeamFilter === 'frontend') return feAssignees;
     if (assigneeTeamFilter === 'backend') return beAssignees;
-    if (assigneeTeamFilter === 'tech') return techAssignees;
+    if (assigneeTeamFilter === 'work') return workAssignees;
     return members;
-  }, [assigneeTeamFilter, feAssignees, beAssignees, techAssignees, members]);
+  }, [assigneeTeamFilter, feAssignees, beAssignees, workAssignees, members]);
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
   const [shakeSave, setShakeSave] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1433,91 +1433,121 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
                   {/* Team filter buttons for quick frontend / backend assignment */}
                   {(feAssignees.length > 0 || beAssignees.length > 0) && (
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 2 }}>
-                      <button
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                      <motion.button
+                        whileHover={{ scale: 1.04, y: -1 }}
+                        whileTap={{ scale: 0.94 }}
+                        transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                         type="button"
                         style={{
-                          padding: '3px 8px',
+                          padding: '4px 9px',
                           fontSize: 10.5,
                           fontWeight: 600,
-                          borderRadius: 6,
+                          borderRadius: 7,
                           cursor: 'pointer',
-                          border: assigneeTeamFilter === 'all' ? '1px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
-                          backgroundColor: assigneeTeamFilter === 'all' ? 'hsl(var(--primary) / 0.12)' : 'hsl(var(--card))',
+                          border: assigneeTeamFilter === 'all' ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
+                          backgroundColor: assigneeTeamFilter === 'all' ? 'hsl(var(--primary) / 0.14)' : 'hsl(var(--card))',
                           color: assigneeTeamFilter === 'all' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
+                          boxShadow: assigneeTeamFilter === 'all' ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
                           display: 'flex', alignItems: 'center', gap: 4,
+                          transition: 'border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
                         }}
                         onClick={() => setAssigneeTeamFilter('all')}
                       >
+                        <Users size={11} />
                         <span>All ({members.length})</span>
-                      </button>
+                      </motion.button>
 
-                      <button
+                      <motion.button
+                        whileHover={{ scale: 1.04, y: -1 }}
+                        whileTap={{ scale: 0.94 }}
+                        transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                         type="button"
                         style={{
-                          padding: '3px 8px',
+                          padding: '4px 9px',
                           fontSize: 10.5,
                           fontWeight: 600,
-                          borderRadius: 6,
+                          borderRadius: 7,
                           cursor: 'pointer',
-                          border: assigneeTeamFilter === 'frontend' ? '1.5px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.3)',
-                          backgroundColor: assigneeTeamFilter === 'frontend' ? 'rgba(14, 165, 233, 0.15)' : 'hsl(var(--card))',
+                          border: assigneeTeamFilter === 'frontend' ? '1.5px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.35)',
+                          backgroundColor: assigneeTeamFilter === 'frontend' ? 'rgba(14, 165, 233, 0.18)' : 'hsl(var(--card))',
                           color: '#0284c7',
+                          boxShadow: assigneeTeamFilter === 'frontend' ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
                           display: 'flex', alignItems: 'center', gap: 4,
+                          transition: 'border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
                         }}
                         onClick={() => setAssigneeTeamFilter('frontend')}
                       >
                         <Globe size={11} />
                         <span>Frontend ({feAssignees.length})</span>
-                      </button>
+                      </motion.button>
 
-                      <button
+                      <motion.button
+                        whileHover={{ scale: 1.04, y: -1 }}
+                        whileTap={{ scale: 0.94 }}
+                        transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                         type="button"
                         style={{
-                          padding: '3px 8px',
+                          padding: '4px 9px',
                           fontSize: 10.5,
                           fontWeight: 600,
-                          borderRadius: 6,
+                          borderRadius: 7,
                           cursor: 'pointer',
-                          border: assigneeTeamFilter === 'backend' ? '1.5px solid #ea580c' : '1px solid rgba(249, 115, 22, 0.3)',
-                          backgroundColor: assigneeTeamFilter === 'backend' ? 'rgba(249, 115, 22, 0.15)' : 'hsl(var(--card))',
+                          border: assigneeTeamFilter === 'backend' ? '1.5px solid #ea580c' : '1px solid rgba(249, 115, 22, 0.35)',
+                          backgroundColor: assigneeTeamFilter === 'backend' ? 'rgba(249, 115, 22, 0.18)' : 'hsl(var(--card))',
                           color: '#ea580c',
+                          boxShadow: assigneeTeamFilter === 'backend' ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
                           display: 'flex', alignItems: 'center', gap: 4,
+                          transition: 'border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
                         }}
                         onClick={() => setAssigneeTeamFilter('backend')}
                       >
                         <Server size={11} />
                         <span>Backend ({beAssignees.length})</span>
-                      </button>
+                      </motion.button>
 
-                      {techAssignees.length > 0 && (
-                        <button
+                      {workAssignees.length > 0 && (
+                        <motion.button
+                          whileHover={{ scale: 1.04, y: -1 }}
+                          whileTap={{ scale: 0.94 }}
+                          transition={{ type: 'spring', stiffness: 450, damping: 25 }}
                           type="button"
                           style={{
-                            padding: '3px 8px',
+                            padding: '4px 9px',
                             fontSize: 10.5,
                             fontWeight: 600,
-                            borderRadius: 6,
+                            borderRadius: 7,
                             cursor: 'pointer',
-                            border: assigneeTeamFilter === 'tech' ? '1.5px solid #7c3aed' : '1px solid rgba(124, 58, 237, 0.3)',
-                            backgroundColor: assigneeTeamFilter === 'tech' ? 'rgba(124, 58, 237, 0.15)' : 'hsl(var(--card))',
-                            color: '#7c3aed',
+                            border: assigneeTeamFilter === 'work' ? '1.5px solid #8b5cf6' : '1px solid rgba(139, 92, 246, 0.35)',
+                            backgroundColor: assigneeTeamFilter === 'work' ? 'rgba(139, 92, 246, 0.18)' : 'hsl(var(--card))',
+                            color: '#8b5cf6',
+                            boxShadow: assigneeTeamFilter === 'work' ? 'var(--neu-shadow-pressed)' : 'var(--neu-shadow-raised-sm)',
                             display: 'flex', alignItems: 'center', gap: 4,
+                            transition: 'border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
                           }}
-                          onClick={() => setAssigneeTeamFilter('tech')}
+                          onClick={() => setAssigneeTeamFilter('work')}
                         >
-                          <Cpu size={11} />
-                          <span>Other ({techAssignees.length})</span>
-                        </button>
+                          <Briefcase size={11} />
+                          <span>Work Roles ({workAssignees.length})</span>
+                        </motion.button>
                       )}
                     </div>
                   )}
 
-                  {filteredAssigneeMembers.length === 0 ? (
-                    <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', padding: '8px 4px' }}>
-                      No {assigneeTeamFilter} team members found.
-                    </div>
-                  ) : (
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={assigneeTeamFilter}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.14, ease: 'easeOut' }}
+                      style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+                    >
+                      {filteredAssigneeMembers.length === 0 ? (
+                        <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', padding: '8px 4px' }}>
+                          No {assigneeTeamFilter} team members found.
+                        </div>
+                      ) : (
                     filteredAssigneeMembers.map(m => {
                       const isCurrent = currentUser?.email && m.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
                       const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
@@ -1552,9 +1582,8 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                             <span style={{
                               fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
                               background: badge.bg, color: badge.color,
-                              display: 'inline-flex', alignItems: 'center', gap: 3
+                              display: 'inline-flex', alignItems: 'center'
                             }}>
-                              <span>{badge.icon}</span>
                               <span>{badge.label}</span>
                             </span>
                           )}
@@ -1576,7 +1605,9 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                         </motion.button>
                       );
                     })
-                  )}
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               ) : (
                 // Read-only assignee display for non-admins
@@ -1616,9 +1647,8 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                             <span style={{
                               fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
                               background: badge.bg, color: badge.color,
-                              display: 'inline-flex', alignItems: 'center', gap: 3
+                              display: 'inline-flex', alignItems: 'center'
                             }}>
-                              <span>{badge.icon}</span>
                               <span>{badge.label}</span>
                             </span>
                           )}

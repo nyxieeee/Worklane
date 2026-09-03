@@ -289,6 +289,7 @@ export function InboxDrawer({
           <div
             style={{
               flex: 1,
+              minHeight: 0,
               overflowY: 'auto',
               padding: '12px',
               display: 'flex',
@@ -356,6 +357,7 @@ export function InboxDrawer({
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 6,
+                    flexShrink: 0,
                     transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
                   }}
                   onMouseEnter={(e) => {

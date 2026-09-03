@@ -1,5 +1,6 @@
 // ── Utility helpers ──────────────────────────────────────────────────────
 import type React from 'react';
+import type { CustomBorderDef } from './types';
 
 export const uid = (): string =>
   Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -178,36 +179,125 @@ export function getAvatarBorderStyle(borderStyle: string | undefined): React.CSS
   };
 }
 
-export type TeamCategory = 'frontend' | 'backend' | 'tech' | 'general';
+const CUSTOM_BORDERS_KEY = 'worklane_custom_borders';
 
-export function getMemberTeamCategory(borderStyle?: string): TeamCategory {
-  if (!borderStyle || borderStyle === 'none') return 'general';
-  if (borderStyle === 'frontend') return 'frontend';
-  if (borderStyle === 'backend') return 'backend';
-  const techRoles = ['devops', 'designer', 'qa', 'fullstack', 'mobile', 'data'];
-  if (techRoles.includes(borderStyle)) return 'tech';
-  return 'general';
+export function getCustomBorders(): CustomBorderDef[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_BORDERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 }
 
-export function getTeamBadgeInfo(borderStyle?: string): { label: string; color: string; bg: string; icon: string } | null {
+export function saveCustomBorder(border: CustomBorderDef): void {
+  try {
+    const list = getCustomBorders();
+    const idx = list.findIndex(b => b.id === border.id);
+    if (idx >= 0) {
+      list[idx] = border;
+    } else {
+      list.unshift(border);
+    }
+    localStorage.setItem(CUSTOM_BORDERS_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Failed to save custom border:', e);
+  }
+}
+
+export function deleteCustomBorder(id: string): void {
+  try {
+    const list = getCustomBorders().filter(b => b.id !== id);
+    localStorage.setItem(CUSTOM_BORDERS_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Failed to delete custom border:', e);
+  }
+}
+
+export function encodeCustomBorderStyle(border: CustomBorderDef): string {
+  return `custom:${border.id}|${border.label}|${border.badgeText}|${border.color}|${border.styleType}`;
+}
+
+export function parseCustomBorderStyle(val?: string): CustomBorderDef | null {
+  if (!val) return null;
+  if (val.startsWith('custom:')) {
+    const payload = val.slice(7);
+    const parts = payload.split('|');
+    if (parts.length >= 4) {
+      const id = parts[0] || 'custom';
+      const label = parts[1] || 'Custom Role';
+      const badgeText = parts[2] || 'ROLE';
+      const color = parts[3] || '#6366f1';
+      const styleType = (parts.length >= 6 ? parts[5] : parts[4]) || 'gradient';
+      return {
+        id,
+        label,
+        badgeText,
+        color,
+        styleType: (styleType as any) || 'gradient',
+        gradient: `linear-gradient(135deg, ${color || '#6366f1'}, #8b5cf6)`
+      };
+    }
+  }
+  // Lookup by ID in saved custom borders
+  const found = getCustomBorders().find(b => b.id === val);
+  return found || null;
+}
+
+export type TeamCategory = 'frontend' | 'backend' | 'work' | 'none';
+
+export function getMemberTeamCategory(borderStyle?: string): TeamCategory {
+  if (!borderStyle || borderStyle === 'none') return 'none';
+  if (borderStyle === 'frontend') return 'frontend';
+  if (borderStyle === 'backend') return 'backend';
+  // All other presets and custom borders are work-related
+  return 'work';
+}
+
+export function getTeamBadgeInfo(borderStyle?: string): { label: string; color: string; bg: string } | null {
   if (!borderStyle || borderStyle === 'none') return null;
+
+  // Custom border & badge lookup
+  const custom = parseCustomBorderStyle(borderStyle);
+  if (custom) {
+    return {
+      label: `${custom.label} (${custom.badgeText})`,
+      color: custom.color,
+      bg: `${custom.color}1e`
+    };
+  }
+
   switch (borderStyle) {
     case 'frontend':
-      return { label: 'Frontend (FE)', color: '#0284c7', bg: 'rgba(14, 165, 233, 0.12)', icon: '🌐' };
+      return { label: 'Frontend (FE)', color: '#0284c7', bg: 'rgba(14, 165, 233, 0.12)' };
     case 'backend':
-      return { label: 'Backend (BE)', color: '#ea580c', bg: 'rgba(249, 115, 22, 0.12)', icon: '⚙️' };
-    case 'devops':
-      return { label: 'DevOps / Cloud', color: '#059669', bg: 'rgba(16, 185, 129, 0.12)', icon: '☁️' };
-    case 'designer':
-      return { label: 'UI/UX Design', color: '#db2777', bg: 'rgba(236, 72, 153, 0.12)', icon: '🎨' };
-    case 'qa':
-      return { label: 'QA / Testing', color: '#7c3aed', bg: 'rgba(139, 92, 246, 0.12)', icon: '🧪' };
+      return { label: 'Backend (BE)', color: '#ea580c', bg: 'rgba(249, 115, 22, 0.12)' };
     case 'fullstack':
-      return { label: 'Full-Stack', color: '#4f46e5', bg: 'rgba(99, 102, 241, 0.12)', icon: '💻' };
+      return { label: 'Full-Stack (FS)', color: '#4f46e5', bg: 'rgba(99, 102, 241, 0.12)' };
+    case 'devops':
+      return { label: 'DevOps / Cloud', color: '#059669', bg: 'rgba(16, 185, 129, 0.12)' };
     case 'mobile':
-      return { label: 'Mobile Dev', color: '#d97706', bg: 'rgba(245, 158, 11, 0.12)', icon: '📱' };
+      return { label: 'Mobile Dev', color: '#d97706', bg: 'rgba(245, 158, 11, 0.12)' };
+    case 'qa':
+      return { label: 'QA / Testing', color: '#7c3aed', bg: 'rgba(139, 92, 246, 0.12)' };
     case 'data':
-      return { label: 'Data / ML', color: '#9333ea', bg: 'rgba(147, 51, 234, 0.12)', icon: '📊' };
+      return { label: 'Data / AI / ML', color: '#9333ea', bg: 'rgba(147, 51, 234, 0.12)' };
+    case 'security':
+      return { label: 'SecOps / Security', color: '#dc2626', bg: 'rgba(239, 68, 68, 0.12)' };
+    case 'designer':
+      return { label: 'UI/UX Design', color: '#db2777', bg: 'rgba(236, 72, 153, 0.12)' };
+    case 'pm':
+      return { label: 'Product Manager (PM)', color: '#d97706', bg: 'rgba(245, 158, 11, 0.12)' };
+    case 'scrum':
+      return { label: 'Scrum Master (SM)', color: '#0891b2', bg: 'rgba(6, 182, 212, 0.12)' };
+    case 'techlead':
+      return { label: 'Tech Lead (TL)', color: '#ca8a04', bg: 'rgba(234, 179, 8, 0.12)' };
+    case 'analyst':
+      return { label: 'Business Analyst (BA)', color: '#059669', bg: 'rgba(16, 185, 129, 0.12)' };
+    case 'marketing':
+      return { label: 'Growth / Marketing', color: '#c026d3', bg: 'rgba(217, 70, 239, 0.12)' };
+    case 'support':
+      return { label: 'IT / Operations', color: '#475569', bg: 'rgba(100, 116, 139, 0.12)' };
     default:
       return null;
   }

@@ -193,9 +193,9 @@ export function getTeamBadgeInfo(borderStyle?: string): { label: string; color: 
   if (!borderStyle || borderStyle === 'none') return null;
   switch (borderStyle) {
     case 'frontend':
-      return { label: 'Frontend Dev', color: '#0284c7', bg: 'rgba(14, 165, 233, 0.12)', icon: '🌐' };
+      return { label: 'Frontend (FE)', color: '#0284c7', bg: 'rgba(14, 165, 233, 0.12)', icon: '🌐' };
     case 'backend':
-      return { label: 'Backend Dev', color: '#ea580c', bg: 'rgba(249, 115, 22, 0.12)', icon: '⚙️' };
+      return { label: 'Backend (BE)', color: '#ea580c', bg: 'rgba(249, 115, 22, 0.12)', icon: '⚙️' };
     case 'devops':
       return { label: 'DevOps / Cloud', color: '#059669', bg: 'rgba(16, 185, 129, 0.12)', icon: '☁️' };
     case 'designer':

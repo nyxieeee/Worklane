@@ -404,5 +404,27 @@ $$ language plpgsql security definer;
 -- alter table public.profiles add column if not exists border_style text default 'none';
 -- alter table public.board_members add column if not exists border_style text default 'none';
 --
+
 -- ==============================================================================
+-- 21. REALTIME REPLICATION (Instant Realtime Sync across all browsers/devices)
+-- ==============================================================================
+-- Enable Realtime publication so Postgres WAL changes are broadcast over WebSockets:
+do $$
+begin
+  alter publication supabase_realtime add table public.boards;
+  alter publication supabase_realtime add table public.board_members;
+  alter publication supabase_realtime add table public.columns;
+  alter publication supabase_realtime add table public.cards;
+  alter publication supabase_realtime add table public.card_assignees;
+  alter publication supabase_realtime add table public.card_labels;
+  alter publication supabase_realtime add table public.comments;
+  alter publication supabase_realtime add table public.attachments;
+  alter publication supabase_realtime add table public.custom_labels;
+  alter publication supabase_realtime add table public.profiles;
+  alter publication supabase_realtime add table public.notifications;
+exception when others then
+  null; -- Ignore if tables are already added or publication already exists
+end;
+$$;
+
 

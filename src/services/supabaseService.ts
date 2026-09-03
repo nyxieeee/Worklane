@@ -155,9 +155,9 @@ export const supabaseService = {
                 color: m.color || '#6366f1',
                 avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
                 role: (m.role as MemberRole) || 'member',
-                borderStyle: (m.border_style && m.border_style !== 'none')
+                borderStyle: (m.border_style !== undefined && m.border_style !== null)
                   ? m.border_style
-                  : (realProfile?.border_style && realProfile.border_style !== 'none' ? realProfile.border_style : (m.border_style || 'none')),
+                  : (realProfile?.border_style || 'none'),
               };
             }),
           b.created_by
@@ -463,14 +463,17 @@ export const supabaseService = {
     if (!isSupabaseConfigured()) return;
     try {
       const payload = { ...meta, timestamp: Date.now() };
-      // If our persistent WebSocket connection is active, send over WebSocket for instant delivery
-      if (activeRealtimeChannel && activeRealtimeChannel.state === 'joined') {
-        await activeRealtimeChannel.send({
-          type: 'broadcast',
-          event,
-          payload,
-        });
-        return;
+      if (activeRealtimeChannel) {
+        try {
+          await activeRealtimeChannel.send({
+            type: 'broadcast',
+            event,
+            payload,
+          });
+          return;
+        } catch {
+          // fallback
+        }
       }
 
       const channel = supabase.channel('worklane-realtime-channel');
@@ -905,13 +908,11 @@ export const supabaseService = {
     if (!isSupabaseConfigured() || !boardId) return false;
     try {
       const cleanEmail = email ? email.toLowerCase().trim() : '';
+      if (memberId) {
+        await supabase.from('board_members').update({ role }).eq('id', memberId);
+      }
       if (cleanEmail) {
-        const { error } = await supabase.from('board_members').update({ role }).eq('board_id', boardId).ilike('email', cleanEmail);
-        if (error && memberId) {
-          await supabase.from('board_members').update({ role }).eq('board_id', boardId).eq('id', memberId);
-        }
-      } else if (memberId) {
-        await supabase.from('board_members').update({ role }).eq('board_id', boardId).eq('id', memberId);
+        await supabase.from('board_members').update({ role }).eq('board_id', boardId).ilike('email', cleanEmail);
       }
 
       try {
@@ -935,17 +936,14 @@ export const supabaseService = {
       const cleanEmail = email ? email.toLowerCase().trim() : '';
       const styleVal = borderStyle || 'none';
 
+      if (memberId) {
+        await supabase.from('board_members').update({ border_style: styleVal }).eq('id', memberId);
+      }
       if (cleanEmail) {
-        const { error } = await supabase.from('board_members').update({ border_style: styleVal }).eq('board_id', boardId).ilike('email', cleanEmail);
-        if (error && memberId) {
-          await supabase.from('board_members').update({ border_style: styleVal }).eq('board_id', boardId).eq('id', memberId);
-        }
-        // Also update profiles table so the user's registered profile keeps their style
+        await supabase.from('board_members').update({ border_style: styleVal }).eq('board_id', boardId).ilike('email', cleanEmail);
         try {
           await supabase.from('profiles').update({ border_style: styleVal }).ilike('email', cleanEmail);
         } catch {}
-      } else if (memberId) {
-        await supabase.from('board_members').update({ border_style: styleVal }).eq('board_id', boardId).eq('id', memberId);
       }
 
       try {

@@ -351,25 +351,7 @@ export default function MembersModal({ onClose }: Props) {
                     {(isOwner || isCurrent) && <span style={{ fontSize: 8, opacity: 0.7 }}>▾</span>}
                   </button>
                 ) : null;
-              })() : (isOwner || isCurrent) ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBorderPickerMemberId(borderPickerMemberId === member.id ? null : member.id);
-                    setPendingBorderStyle(member.borderStyle || 'none');
-                  }}
-                  style={{
-                    fontSize: 9.5, fontWeight: 600, padding: '1px 6px', borderRadius: 6,
-                    background: 'hsl(var(--muted) / 0.5)', color: 'hsl(var(--muted-foreground))',
-                    border: '1px dashed hsl(var(--border))', cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: 3
-                  }}
-                  title="Assign team role (Frontend, Backend, etc.)"
-                >
-                  <Plus size={9} />
-                  <span>Assign Role</span>
-                </button>
-              ) : null}
+              })() : null}
             </div>
             {member.email && (
               <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -425,56 +407,6 @@ export default function MembersModal({ onClose }: Props) {
               >
                 {memberRole === 'admin' ? <Shield size={11} /> : memberRole === 'observer' ? <Eye size={11} /> : <User size={11} />}
                 <span style={{ textTransform: 'capitalize' }}>{memberRole}</span>
-              </div>
-            )}
-
-            {/* Quick 1-Click Role Assignment (Owner or Current User) */}
-            {(isOwner || isCurrent) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                <button
-                  type="button"
-                  title={`Set ${isCurrent ? 'your role' : member.name} as Frontend Dev`}
-                  style={{
-                    padding: '3px 7px', fontSize: 10, fontWeight: 700, borderRadius: 6,
-                    border: member.borderStyle === 'frontend' ? '1.5px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.35)',
-                    backgroundColor: member.borderStyle === 'frontend' ? '#0284c7' : 'rgba(14, 165, 233, 0.08)',
-                    color: member.borderStyle === 'frontend' ? '#fff' : '#0284c7',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onClick={() => {
-                    const newStyle = member.borderStyle === 'frontend' ? 'none' : 'frontend';
-                    updateMember(member.id, { borderStyle: newStyle });
-                    if (isCurrent) {
-                      useAuthStore.getState().updateUserProfile({ borderStyle: newStyle });
-                    }
-                    showToast(newStyle === 'frontend' ? `Assigned to Frontend Team` : `Removed from Frontend Team`, 'success');
-                  }}
-                >
-                  FE
-                </button>
-                <button
-                  type="button"
-                  title={`Set ${isCurrent ? 'your role' : member.name} as Backend Dev`}
-                  style={{
-                    padding: '3px 7px', fontSize: 10, fontWeight: 700, borderRadius: 6,
-                    border: member.borderStyle === 'backend' ? '1.5px solid #ea580c' : '1px solid rgba(249, 115, 22, 0.35)',
-                    backgroundColor: member.borderStyle === 'backend' ? '#ea580c' : 'rgba(249, 115, 22, 0.08)',
-                    color: member.borderStyle === 'backend' ? '#fff' : '#ea580c',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onClick={() => {
-                    const newStyle = member.borderStyle === 'backend' ? 'none' : 'backend';
-                    updateMember(member.id, { borderStyle: newStyle });
-                    if (isCurrent) {
-                      useAuthStore.getState().updateUserProfile({ borderStyle: newStyle });
-                    }
-                    showToast(newStyle === 'backend' ? `Assigned to Backend Team` : `Removed from Backend Team`, 'success');
-                  }}
-                >
-                  BE
-                </button>
               </div>
             )}
 
@@ -807,7 +739,7 @@ export default function MembersModal({ onClose }: Props) {
                   <Globe size={24} style={{ color: '#0284c7' }} />
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Frontend Members Yet</div>
                   <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
-                    Switch to "All", then click the <strong>FE</strong> button or 🎨 palette on any member to set their role to <strong>Frontend Dev</strong>.
+                    Switch to "All", then click the 🎨 palette icon on any member to set their profile border to <strong>Frontend Dev</strong>.
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.95 }}
@@ -834,7 +766,7 @@ export default function MembersModal({ onClose }: Props) {
                   <Server size={24} style={{ color: '#ea580c' }} />
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Backend Members Yet</div>
                   <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
-                    Switch to "All", then click the <strong>BE</strong> button or 🎨 palette on any member to set their role to <strong>Backend Dev</strong>.
+                    Switch to "All", then click the 🎨 palette icon on any member to set their profile border to <strong>Backend Dev</strong>.
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.95 }}

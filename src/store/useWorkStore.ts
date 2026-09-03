@@ -206,7 +206,7 @@ export const useWorkStore = create<WorkState>()(
               if (hasPendingSync) {
                 return {
                   ...memBoard,
-                  members: mergedMembers,
+                  members: memBoard.members?.length ? memBoard.members : mergedMembers,
                 };
               }
 

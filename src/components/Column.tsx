@@ -280,7 +280,7 @@ export default function Column({ col, colIndex, dragState, setDragState, onOpenC
 
       {/* Footer / Add Card Form */}
       {!isObserver && (
-        <div style={{ padding: '10px 12px' }}>
+        <div style={{ padding: '8px 12px 10px 12px', flexShrink: 0 }}>
           {showAddCard ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <textarea

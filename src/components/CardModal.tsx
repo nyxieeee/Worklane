@@ -75,6 +75,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const [mentionQuery, setMentionQuery] = useState('');
   const [selectedMentionIdx, setSelectedMentionIdx] = useState(0);
   const commentInputRef = useRef<HTMLInputElement>(null);
+  const mentionBlurTimeoutRef = useRef<number | undefined>(undefined);
 
   const result = useMemo(() => {
     if (!cardId) return null;
@@ -311,6 +312,9 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   };
 
   const handleSelectMention = (member: { name: string; email?: string }) => {
+    if (mentionBlurTimeoutRef.current) {
+      clearTimeout(mentionBlurTimeoutRef.current);
+    }
     const val = commentText;
     const cursorPos = commentInputRef.current?.selectionStart || val.length;
     const textBeforeCursor = val.slice(0, cursorPos);
@@ -321,6 +325,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
     const newComment = `${newTextBefore}@${member.name} ${textAfterCursor}`;
     setCommentText(newComment);
     setShowMentionMenu(false);
+    setMentionQuery('');
 
     setTimeout(() => {
       if (commentInputRef.current) {
@@ -811,10 +816,20 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                     type="button"
                     className="btn btn-ghost"
                     style={{ fontSize: 11, padding: '2px 8px', color: 'hsl(var(--primary))', display: 'flex', alignItems: 'center', gap: 4 }}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                    }}
                     onClick={() => {
-                      setCommentText(prev => prev + (prev && !prev.endsWith(' ') ? ' @' : '@'));
+                      if (mentionBlurTimeoutRef.current) {
+                        clearTimeout(mentionBlurTimeoutRef.current);
+                      }
+                      setCommentText(prev => {
+                        const needsSpace = prev.length > 0 && !prev.endsWith(' ');
+                        return prev + (needsSpace ? ' @' : '@');
+                      });
                       setShowMentionMenu(true);
                       setMentionQuery('');
+                      setSelectedMentionIdx(0);
                       commentInputRef.current?.focus();
                     }}
                   >
@@ -831,6 +846,12 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 6, scale: 0.97 }}
                     transition={{ duration: 0.12 }}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      if (mentionBlurTimeoutRef.current) {
+                        clearTimeout(mentionBlurTimeoutRef.current);
+                      }
+                    }}
                     style={{
                       position: 'absolute',
                       bottom: '100%',
@@ -876,6 +897,9 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                           }}
                           onMouseDown={e => {
                             e.preventDefault();
+                            if (mentionBlurTimeoutRef.current) {
+                              clearTimeout(mentionBlurTimeoutRef.current);
+                            }
                             handleSelectMention(m);
                           }}
                         >
@@ -912,7 +936,16 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                   value={commentText}
                   onChange={handleCommentChange}
                   onKeyDown={handleCommentKeyDown}
-                  onBlur={() => setTimeout(() => setShowMentionMenu(false), 200)}
+                  onFocus={() => {
+                    if (mentionBlurTimeoutRef.current) {
+                      clearTimeout(mentionBlurTimeoutRef.current);
+                    }
+                  }}
+                  onBlur={() => {
+                    mentionBlurTimeoutRef.current = window.setTimeout(() => {
+                      setShowMentionMenu(false);
+                    }, 250);
+                  }}
                 />
                 <motion.button
                   whileTap={commentText.trim() ? { scale: 0.92 } : undefined}

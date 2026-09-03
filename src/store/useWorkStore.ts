@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Board, Column, Card, Member, MemberRole, Attachment, Comment } from '../types';
 import { AVATAR_COLORS, LABELS } from '../types';
-import { uid, avatarInitials } from '../utils';
+import { uid, avatarInitials, sortMembersWithOwnerFirst } from '../utils';
 import { useEmailStore } from './useEmailStore';
 import { useAuthStore } from './useAuthStore';
 import { useNotifStore } from './useNotifStore';
@@ -21,6 +21,7 @@ interface WorkState {
   // Board actions
   createBoard: (name: string, color: string, createdBy?: string, creatorName?: string) => Promise<Board>;
   deleteBoard: (boardId: string) => void;
+  renameBoard: (boardId: string, name: string) => void;
   leaveBoard: (boardId: string, userEmail: string) => void;
   switchBoard: (boardId: string) => void;
   syncCurrentUserProfile: (user: { name?: string; email?: string; avatarUrl?: string }) => void;
@@ -59,7 +60,7 @@ interface WorkState {
   deleteComment: (cardId: string, commentId: string) => void;
 
   // Member actions
-  addMember: (name: string, email: string, avatarUrl?: string, role?: MemberRole) => string | null;
+  addMember: (name: string, email: string, avatarUrl?: string, role?: MemberRole, userId?: string) => Promise<string | null>;
   updateMember: (memberId: string, patch: Partial<Member>) => void;
   updateMemberRole: (boardId: string, memberId: string, role: MemberRole) => void;
   removeMember: (memberId: string) => void;
@@ -123,6 +124,7 @@ function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => C
 }
 
 const syncTimers = new Map<string, number>();
+const recentlyRemovedEmails = new Map<string, number>(); // email -> timestamp ms
 
 export function scheduleBoardSync(board: Board, delayMs = 60) {
   if (!board || !board.id) return;
@@ -166,19 +168,51 @@ export const useWorkStore = create<WorkState>()(
             return;
           }
 
-          // Supabase is the single source of truth.
-          // Only preserve in-memory boards if a local edit is actively debouncing
+          // Supabase is the single source of truth, but we must never drop local in-flight members or edits
           set(s => {
+            const now = Date.now();
+            for (const [em, t] of recentlyRemovedEmails.entries()) {
+              if (now - t > 10000) recentlyRemovedEmails.delete(em);
+            }
+
             const finalBoards = cloudBoards.map(cb => {
+              const memBoard = s.boards.find(lb => lb.id === cb.id);
+              if (!memBoard) {
+                const cleanMembers = (cb.members || []).filter(
+                  m => !m.email || !recentlyRemovedEmails.has(m.email.toLowerCase().trim())
+                );
+                return { ...cb, members: cleanMembers };
+              }
+
               const hasPendingSync = syncTimers.has(cb.id);
 
+              // Filter out recently removed members
+              const cloudMembersFiltered = (cb.members || []).filter(
+                m => !m.email || !recentlyRemovedEmails.has(m.email.toLowerCase().trim())
+              );
+
+              // Preserve any locally added members that have not yet been returned in the cloud response
+              const cloudEmails = new Set(cloudMembersFiltered.map(m => (m.email || '').toLowerCase().trim()).filter(Boolean));
+              const localPendingMembers = (memBoard.members || []).filter(
+                m => m.email && !cloudEmails.has(m.email.toLowerCase().trim()) && !recentlyRemovedEmails.has(m.email.toLowerCase().trim())
+              );
+
+              const mergedMembers = sortMembersWithOwnerFirst(
+                [...cloudMembersFiltered, ...localPendingMembers],
+                cb.createdBy
+              );
+
               if (hasPendingSync) {
-                const memBoard = s.boards.find(lb => lb.id === cb.id);
-                if (memBoard) {
-                  return { ...memBoard, members: cb.members };
-                }
+                return {
+                  ...memBoard,
+                  members: mergedMembers,
+                };
               }
-              return cb;
+
+              return {
+                ...cb,
+                members: mergedMembers,
+              };
             });
 
             // Include newly created boards that haven't propagated to cloud yet
@@ -342,6 +376,26 @@ export const useWorkStore = create<WorkState>()(
           return { boards, activeBoardId };
         });
         supabaseService.deleteBoard(boardId);
+      },
+
+      renameBoard: (boardId, name) => {
+        const cleanName = name.trim();
+        if (!cleanName) return;
+        let targetBoard: Board | undefined;
+        set(s => {
+          const updatedBoards = updateBoards(s.boards, boardId, b => ({
+            ...b,
+            name: cleanName,
+          }));
+          targetBoard = updatedBoards.find(b => b.id === boardId);
+          return { boards: updatedBoards };
+        });
+        if (targetBoard) {
+          scheduleBoardSync(targetBoard, 30);
+          if (supabaseService.isConfigured()) {
+            supabaseService.updateBoard(boardId, { name: cleanName });
+          }
+        }
       },
 
       leaveBoard: (boardId, userEmail) => {
@@ -816,12 +870,17 @@ export const useWorkStore = create<WorkState>()(
 
           const updatedBoards = updateBoards(s.boards, tb.id, b =>
             updateCardInBoard(b, cardId, c => ({
-              ...c, attachments: (c.attachments || []).filter(a => a.id !== attId),
+              ...c,
+              attachments: (c.attachments || []).filter(a => a.id !== attId),
+              coverAttachmentId: c.coverAttachmentId === attId ? null : c.coverAttachmentId,
             }))
           );
           targetBoard = updatedBoards.find(b => b.id === tb.id);
           return { boards: updatedBoards };
         });
+        if (supabaseService.isConfigured()) {
+          supabaseService.deleteAttachment(attId);
+        }
         if (targetBoard) scheduleBoardSync(targetBoard, 50);
       },
 
@@ -940,13 +999,16 @@ export const useWorkStore = create<WorkState>()(
       },
 
       // ── Member actions ────────────────────────────────
-      addMember: (name, email, avatarUrl, role = 'member') => {
+      addMember: async (name, email, avatarUrl, role = 'member', userId?: string) => {
         let newId: string | null = null;
         let newMember: Member | null = null;
         const currentActiveId = get().activeBoardId;
         if (!currentActiveId) return null;
 
         const cleanEmail = email ? email.toLowerCase().trim() : '';
+
+        // If it was recently marked removed, clear it from the removal blocklist
+        if (cleanEmail) recentlyRemovedEmails.delete(cleanEmail);
 
         set(s => {
           const currentBoard = s.boards.find(b => b.id === currentActiveId);
@@ -967,9 +1029,9 @@ export const useWorkStore = create<WorkState>()(
         });
 
         if (newMember) {
-          supabaseService.addMember(currentActiveId, newMember);
-          const board = get().boards.find(b => b.id === currentActiveId);
-          if (board) scheduleBoardSync(board, 50);
+          if (supabaseService.isConfigured()) {
+            await supabaseService.addMember(currentActiveId, newMember, userId);
+          }
         }
 
         return newId;
@@ -1015,6 +1077,9 @@ export const useWorkStore = create<WorkState>()(
           const currentBoard = s.boards.find(b => b.id === s.activeBoardId);
           const memberObj = currentBoard?.members.find(m => m.id === memberId);
           removedEmail = memberObj?.email;
+          if (removedEmail) {
+            recentlyRemovedEmails.set(removedEmail.toLowerCase().trim(), Date.now());
+          }
 
           const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => ({
             ...b,

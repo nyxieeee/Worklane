@@ -14,6 +14,7 @@ interface EmailState {
     eventType: EmailNotificationLog['eventType'];
   }) => void;
   clearLogs: () => void;
+  deleteLog: (id: string) => void;
 }
 
 export const useEmailStore = create<EmailState>()(
@@ -57,6 +58,7 @@ export const useEmailStore = create<EmailState>()(
       },
 
       clearLogs: () => set({ logs: [] }),
+      deleteLog: (id: string) => set(s => ({ logs: s.logs.filter(l => l.id !== id) })),
     }),
     { name: 'worklane_email_store_v1' }
   )

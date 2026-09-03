@@ -291,16 +291,6 @@ export const supabaseService = {
         if (mErr) console.warn('[SupabaseService] Member upsert warning:', mErr);
       }
 
-      // Clean up removed members
-      const currentMemberIds = (board.members || []).map(m => m.id).filter(Boolean);
-      if (currentMemberIds.length > 0) {
-        await supabase
-          .from('board_members')
-          .delete()
-          .eq('board_id', board.id)
-          .not('id', 'in', `(${currentMemberIds.join(',')})`);
-      }
-
       // 3. Upsert Columns
       const currentColIds = (board.columns || []).map(c => c.id).filter(Boolean);
       if (board.columns?.length > 0) {
@@ -422,6 +412,23 @@ export const supabaseService = {
         if (allAtts.length > 0) {
           await supabase.from('attachments').upsert(allAtts, { onConflict: 'id' });
         }
+
+        // Clean up removed attachments for existing cards
+        const allAttIds = allAtts.map(a => a.id).filter(Boolean);
+        if (currentCardIds.length > 0) {
+          if (allAttIds.length > 0) {
+            await supabase
+              .from('attachments')
+              .delete()
+              .in('card_id', currentCardIds)
+              .not('id', 'in', `(${allAttIds.join(',')})`);
+          } else {
+            await supabase
+              .from('attachments')
+              .delete()
+              .in('card_id', currentCardIds);
+          }
+        }
       }
 
       // Delete orphaned cards (cards that were removed from the board)
@@ -474,22 +481,23 @@ export const supabaseService = {
   /**
    * Directly add a single member to a board in Supabase
    */
-  async addMember(boardId: string, member: Member): Promise<boolean> {
+  async addMember(boardId: string, member: Member, userId?: string): Promise<boolean> {
     if (!isSupabaseConfigured() || !boardId || !member?.email) return false;
     try {
       const cleanEmail = member.email.toLowerCase().trim();
 
-      // Look up if user already has a real avatar registered in profiles
+      // Look up if user already has a real avatar or registered user_id in profiles
       const { data: prof } = await supabase
         .from('profiles')
-        .select('avatar_url, name')
+        .select('id, avatar_url, name')
         .ilike('email', cleanEmail)
         .maybeSingle();
 
       const finalAvatar = prof?.avatar_url || member.avatarUrl || null;
       const finalName = prof?.name || member.name;
+      const finalUserId = userId || prof?.id || null;
 
-      const { error } = await supabase.from('board_members').upsert({
+      const memberPayload: any = {
         id: member.id,
         board_id: boardId,
         name: finalName,
@@ -497,7 +505,12 @@ export const supabaseService = {
         color: member.color,
         avatar_url: finalAvatar,
         role: member.role || 'member',
-      }, { onConflict: 'board_id,email' });
+      };
+      if (finalUserId) {
+        memberPayload.user_id = finalUserId;
+      }
+
+      const { error } = await supabase.from('board_members').upsert(memberPayload, { onConflict: 'board_id,email' });
 
       if (error) {
         console.error('[SupabaseService] Error adding member directly:', error);
@@ -771,6 +784,28 @@ export const supabaseService = {
   },
 
   /**
+   * Update board properties (e.g. rename board)
+   */
+  async updateBoard(boardId: string, patch: Partial<Board>): Promise<boolean> {
+    if (!isSupabaseConfigured() || !boardId) return false;
+    try {
+      const dbPatch: any = { updated_at: new Date().toISOString() };
+      if (patch.name !== undefined) dbPatch.name = patch.name.trim();
+      if (patch.color !== undefined) dbPatch.color = patch.color;
+      const { error } = await supabase.from('boards').update(dbPatch).eq('id', boardId);
+      if (error) {
+        console.error('[SupabaseService] Error updating board:', error);
+        throw error;
+      }
+      this.broadcastUpdate('boards', { boardId, ...patch });
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Error updating board:', err);
+      return false;
+    }
+  },
+
+  /**
    * Delete a board from Supabase (cascades cleanly through foreign keys)
    */
   async deleteBoard(boardId: string): Promise<boolean> {
@@ -804,6 +839,24 @@ export const supabaseService = {
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error deleting card:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Delete an attachment from Supabase database
+   */
+  async deleteAttachment(attId: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !attId) return false;
+    try {
+      const { error } = await supabase.from('attachments').delete().eq('id', attId);
+      if (error) {
+        console.warn('[SupabaseService] Error deleting attachment:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Error deleting attachment:', err);
       return false;
     }
   },
@@ -876,6 +929,21 @@ export const supabaseService = {
       await supabase.from('notifications').delete().ilike('recipient_email', email.toLowerCase().trim());
     } catch (err) {
       console.warn('[SupabaseService] Error clearing notifications:', err);
+    }
+  },
+
+  /**
+   * Cloud Notifications: Delete a single notification by id
+   */
+  async deleteNotification(id: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !id) return false;
+    try {
+      const { error } = await supabase.from('notifications').delete().eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Error deleting notification:', err);
+      return false;
     }
   },
 

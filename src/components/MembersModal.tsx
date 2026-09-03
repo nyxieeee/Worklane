@@ -57,6 +57,7 @@ export default function MembersModal({ onClose }: Props) {
   const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<RegisteredUser | null>(null);
   const [role, setRole] = useState<AssignableRole>('member');
+  const [isAdding, setIsAdding] = useState(false);
 
   // Invite link state
   const [inviteRole, setInviteRole] = useState<AssignableRole>('member');
@@ -129,8 +130,8 @@ export default function MembersModal({ onClose }: Props) {
     e.target.value = '';
   };
 
-  const handleAddSelected = () => {
-    if (!canManage || !selectedUser) return;
+  const handleAddSelected = async () => {
+    if (!canManage || !selectedUser || isAdding) return;
     const cleanEmail = selectedUser.email.toLowerCase().trim();
     
     // Check if already in board
@@ -139,33 +140,40 @@ export default function MembersModal({ onClose }: Props) {
       return;
     }
 
-    const result = addMember(selectedUser.name, cleanEmail, selectedUser.avatarUrl, role);
-    if (result !== null) {
-      const adderName = currentUser?.name || currentUser?.email || 'A board manager';
-      
-      // In-app notification
-      useNotifStore.getState().addNotification(
-        `Invited to board: ${board.name}`,
-        `${adderName} added you as ${role === 'observer' ? 'an Observer' : role === 'admin' ? 'an Admin' : 'a Member'} on "${board.name}".`,
-        'users',
-        null,
-        board.id,
-        cleanEmail
-      );
+    setIsAdding(true);
+    try {
+      const result = await addMember(selectedUser.name, cleanEmail, selectedUser.avatarUrl, role, selectedUser.id);
+      if (result !== null) {
+        const adderName = currentUser?.name || currentUser?.email || 'A board manager';
+        
+        // In-app notification
+        useNotifStore.getState().addNotification(
+          `Invited to board: ${board.name}`,
+          `${adderName} added you as ${role === 'observer' ? 'an Observer' : role === 'admin' ? 'an Admin' : 'a Member'} on "${board.name}".`,
+          'users',
+          null,
+          board.id,
+          cleanEmail
+        );
 
-      // Dispatched email log
-      useEmailStore.getState().sendEmailNotification({
-        recipient: { id: result || uid(), name: selectedUser.name, email: cleanEmail, color: '#6366f1' },
-        subject: `You've been added to board "${board.name}" on Worklane`,
-        body: `Hi ${selectedUser.name},\n\n${adderName} added you as ${role === 'observer' ? 'an Observer (study mode)' : role === 'admin' ? 'an Admin' : 'a Member'} to collaborate on board "${board.name}".\n\nWorklane Team`,
-        eventType: 'member_added',
-      });
+        // Dispatched email log
+        useEmailStore.getState().sendEmailNotification({
+          recipient: { id: result || uid(), name: selectedUser.name, email: cleanEmail, color: '#6366f1' },
+          subject: `You've been added to board "${board.name}" on Worklane`,
+          body: `Hi ${selectedUser.name},\n\n${adderName} added you as ${role === 'observer' ? 'an Observer (study mode)' : role === 'admin' ? 'an Admin' : 'a Member'} to collaborate on board "${board.name}".\n\nWorklane Team`,
+          eventType: 'member_added',
+        });
 
-      showToast(`Added ${selectedUser.name} (${role === 'observer' ? 'Observer' : role === 'admin' ? 'Admin' : 'Member'}) to "${board.name}"`, 'success');
-      setSelectedUser(null);
-      setSearchQuery('');
-      setSearchResults([]);
-      setRole('member');
+        showToast(`Added ${selectedUser.name} (${role === 'observer' ? 'Observer' : role === 'admin' ? 'Admin' : 'Member'}) to "${board.name}"`, 'success');
+        setSelectedUser(null);
+        setSearchQuery('');
+        setSearchResults([]);
+        setRole('member');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to add member to board', 'error');
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -721,9 +729,18 @@ export default function MembersModal({ onClose }: Props) {
                         whileTap={{ scale: 0.95 }}
                         className="btn btn-primary"
                         onClick={handleAddSelected}
-                        style={{ width: '100%', height: 38, justifyContent: 'center' }}
+                        disabled={isAdding}
+                        style={{ width: '100%', height: 38, justifyContent: 'center', opacity: isAdding ? 0.75 : 1 }}
                       >
-                        <UserPlus size={14} /> Add to Team
+                        {isAdding ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" /> Adding...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus size={14} /> Add to Team
+                          </>
+                        )}
                       </motion.button>
                     </div>
                   </div>

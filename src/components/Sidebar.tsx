@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   KanbanSquare, List, Calendar, Users, BellRing, Inbox,
   Mail, Shield, Plus, X, ChevronLeft, ChevronRight,
   ArrowLeft, Check, Sun, Moon, LayoutDashboard,
-  Eye, EyeOff, LogOut, Settings, Sliders
+  Eye, EyeOff, LogOut, Settings, Sliders, Pencil
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -54,9 +54,13 @@ export default function Sidebar({
 }: Props) {
   const allBoards        = useWorkStore(s => s.boards);
   const activeBoardId    = useWorkStore(s => s.activeBoardId);
+  const deleteBoard = useWorkStore(s => s.deleteBoard);
+  const leaveBoard  = useWorkStore(s => s.leaveBoard);
+  const renameBoard = useWorkStore(s => s.renameBoard);
+
+  const [editingSidebarBoardId, setEditingSidebarBoardId] = React.useState<string | null>(null);
+  const [editingSidebarBoardName, setEditingSidebarBoardName] = React.useState('');
   const getVisibleBoards = useWorkStore(s => s.getVisibleBoards);
-  const deleteBoard      = useWorkStore(s => s.deleteBoard);
-  const leaveBoard       = useWorkStore(s => s.leaveBoard);
   const user             = useAuthStore(s => s.user);
   const logout           = useAuthStore(s => s.logout);
   const labelMode        = useSettingsStore(s => s.labelMode);
@@ -257,12 +261,76 @@ export default function Sidebar({
                   className="sidebar-board-item"
                   onClick={() => onSelectBoard(b.id)}
                 >
-                  <div className="sidebar-board-dot" style={{ backgroundColor: b.color }} />
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {b.name}
-                  </span>
-                  <div className="sidebar-board-actions">
-                    {!b.createdBy || (user?.email && b.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) ? (
+                  {editingSidebarBoardId === b.id ? (
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <input
+                        type="text"
+                        value={editingSidebarBoardName}
+                        onChange={e => setEditingSidebarBoardName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            if (editingSidebarBoardName.trim() && editingSidebarBoardName.trim() !== b.name) {
+                              renameBoard(b.id, editingSidebarBoardName.trim());
+                              showToast(`Renamed to "${editingSidebarBoardName.trim()}"`, 'success');
+                            }
+                            setEditingSidebarBoardId(null);
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingSidebarBoardId(null);
+                          }
+                        }}
+                        autoFocus
+                        className="text-input"
+                        style={{ fontSize: 12, padding: '2px 6px', height: 24, borderRadius: 4, flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="sidebar-action-icon-btn"
+                        style={{ color: 'hsl(var(--primary))' }}
+                        onClick={() => {
+                          if (editingSidebarBoardName.trim() && editingSidebarBoardName.trim() !== b.name) {
+                            renameBoard(b.id, editingSidebarBoardName.trim());
+                            showToast(`Renamed to "${editingSidebarBoardName.trim()}"`, 'success');
+                          }
+                          setEditingSidebarBoardId(null);
+                        }}
+                        title="Save"
+                      >
+                        <Check size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        className="sidebar-action-icon-btn"
+                        onClick={() => setEditingSidebarBoardId(null)}
+                        title="Cancel"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="sidebar-board-dot" style={{ backgroundColor: b.color }} />
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {b.name}
+                      </span>
+                      <div className="sidebar-board-actions">
+                        {(!b.createdBy || (user?.email && b.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) || (b.members && b.members.some(m => m.email && user?.email && m.email.toLowerCase().trim() === user.email.toLowerCase().trim() && m.role !== 'observer'))) && (
+                          <button
+                            className="sidebar-action-icon-btn"
+                            title="Rename Board"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingSidebarBoardId(b.id);
+                              setEditingSidebarBoardName(b.name);
+                            }}
+                          >
+                            <Pencil size={11} />
+                          </button>
+                        )}
+                        {!b.createdBy || (user?.email && b.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) ? (
                       <button
                         className="sidebar-action-icon-btn"
                         title="Delete Board"
@@ -311,8 +379,10 @@ export default function Sidebar({
                       </button>
                     )}
                   </div>
-                </motion.div>
-              ))}
+                </>
+              )}
+            </motion.div>
+          ))}
             </div>
           </>
         ) : (
@@ -328,15 +398,79 @@ export default function Sidebar({
                 <span>All Boards</span>
               </motion.button>
               {activeBoard && (
-                <div
-                  className="sidebar-board-item active"
-                  style={{ marginTop: 2, pointerEvents: 'none' }}
-                >
-                  <div className="sidebar-board-dot" style={{ backgroundColor: activeBoard.color }} />
-                  <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {activeBoard.name}
-                  </span>
-                </div>
+                editingSidebarBoardId === activeBoard.id ? (
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', marginTop: 2 }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <input
+                      type="text"
+                      value={editingSidebarBoardName}
+                      onChange={e => setEditingSidebarBoardName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          if (editingSidebarBoardName.trim() && editingSidebarBoardName.trim() !== activeBoard.name) {
+                            renameBoard(activeBoard.id, editingSidebarBoardName.trim());
+                            showToast(`Renamed to "${editingSidebarBoardName.trim()}"`, 'success');
+                          }
+                          setEditingSidebarBoardId(null);
+                        }
+                        if (e.key === 'Escape') {
+                          setEditingSidebarBoardId(null);
+                        }
+                      }}
+                      autoFocus
+                      className="text-input"
+                      style={{ fontSize: 12, padding: '2px 6px', height: 24, borderRadius: 4, flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="sidebar-action-icon-btn"
+                      style={{ color: 'hsl(var(--primary))' }}
+                      onClick={() => {
+                        if (editingSidebarBoardName.trim() && editingSidebarBoardName.trim() !== activeBoard.name) {
+                          renameBoard(activeBoard.id, editingSidebarBoardName.trim());
+                          showToast(`Renamed to "${editingSidebarBoardName.trim()}"`, 'success');
+                        }
+                        setEditingSidebarBoardId(null);
+                      }}
+                      title="Save"
+                    >
+                      <Check size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      className="sidebar-action-icon-btn"
+                      onClick={() => setEditingSidebarBoardId(null)}
+                      title="Cancel"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="sidebar-board-item active"
+                    style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <div className="sidebar-board-dot" style={{ backgroundColor: activeBoard.color }} />
+                    <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {activeBoard.name}
+                    </span>
+                    {(!activeBoard.createdBy || (user?.email && activeBoard.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) || (activeBoard.members && activeBoard.members.some(m => m.email && user?.email && m.email.toLowerCase().trim() === user.email.toLowerCase().trim() && m.role !== 'observer'))) && (
+                      <button
+                        className="sidebar-action-icon-btn"
+                        title="Rename Board"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingSidebarBoardId(activeBoard.id);
+                          setEditingSidebarBoardName(activeBoard.name);
+                        }}
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                  </div>
+                )
               )}
             </div>
 

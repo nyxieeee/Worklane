@@ -17,6 +17,7 @@ export default function EmailNotifModal({ onClose }: Props) {
   const updateSettings = useEmailStore(s => s.updateSettings);
   const sendEmailNotification = useEmailStore(s => s.sendEmailNotification);
   const clearLogs = useEmailStore(s => s.clearLogs);
+  const deleteLog = useEmailStore(s => s.deleteLog);
   const showToast = useToastStore(s => s.showToast);
 
   const [testEmail, setTestEmail] = useState('');
@@ -184,7 +185,10 @@ export default function EmailNotifModal({ onClose }: Props) {
               {logs.length > 0 && (
                 <motion.button
                   whileTap={{ scale: 0.95 }}
-                  onClick={clearLogs}
+                  onClick={() => {
+                    clearLogs();
+                    onClose();
+                  }}
                   className="btn btn-ghost"
                   style={{ fontSize: 11, padding: '2px 6px', color: 'hsl(var(--destructive))' }}
                 >
@@ -200,12 +204,24 @@ export default function EmailNotifModal({ onClose }: Props) {
                 </div>
               ) : (
                 logs.map(log => (
-                  <div key={log.id} style={{ padding: '8px 12px', borderBottom: '1px solid hsl(var(--border) / 0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div>
+                  <div key={log.id} style={{ padding: '8px 12px', borderBottom: '1px solid hsl(var(--border) / 0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>{log.recipientEmail}</div>
                       <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))' }}>{log.subject}</div>
                     </div>
-                    <span style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>{formatTime(log.sentAt)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))' }}>{formatTime(log.sentAt)}</span>
+                      <motion.button
+                        whileTap={{ scale: 0.85 }}
+                        type="button"
+                        className="icon-btn"
+                        style={{ width: 18, height: 18, minWidth: 18, minHeight: 18, padding: 0, borderRadius: 3, color: 'hsl(var(--muted-foreground))' }}
+                        onClick={() => deleteLog(log.id)}
+                        title="Delete log entry"
+                      >
+                        <X size={11} />
+                      </motion.button>
+                    </div>
                   </div>
                 ))
               )}

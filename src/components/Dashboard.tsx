@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   KanbanSquare, Plus, CheckSquare, Clock,
   Layers, Zap, CheckCircle2,
-  Calendar, Activity, ArrowUpRight, Sparkles, Trash2, LogOut
+  Calendar, Activity, ArrowUpRight, Sparkles, Trash2, LogOut, Pencil, Check, X
 } from 'lucide-react';
 import { motion, type Variants } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -55,6 +55,10 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
   const showToast          = useToastStore(s => s.showToast);
   const showConfirm        = useConfirmStore(s => s.showConfirm);
   const customLabels       = useSettingsStore(s => s.customLabels);
+  const renameBoard        = useWorkStore(s => s.renameBoard);
+
+  const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
+  const [editingBoardName, setEditingBoardName] = useState('');
 
   const allLabels = useMemo(() => [...LABELS, ...customLabels], [customLabels]);
 
@@ -319,24 +323,95 @@ export default function Dashboard({ onSelectBoard, onCreateBoard, onOpenCard }: 
                       onClick={() => onSelectBoard(board.id)}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {editingBoardId === board.id ? (
                           <div
-                            style={{
-                              width: 12,
-                              height: 12,
-                              borderRadius: '50%',
-                              backgroundColor: board.color,
-                              boxShadow: 'var(--neu-shadow-raised-sm)'
-                            }}
-                          />
-                          <span style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--foreground))' }}>
-                            {board.name}
-                          </span>
-                        </div>
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <input
+                              type="text"
+                              value={editingBoardName}
+                              onChange={e => setEditingBoardName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  if (editingBoardName.trim() && editingBoardName.trim() !== board.name) {
+                                    renameBoard(board.id, editingBoardName.trim());
+                                    showToast(`Renamed to "${editingBoardName.trim()}"`, 'success');
+                                  }
+                                  setEditingBoardId(null);
+                                }
+                                if (e.key === 'Escape') {
+                                  setEditingBoardId(null);
+                                }
+                              }}
+                              autoFocus
+                              className="text-input"
+                              style={{ fontSize: 13.5, fontWeight: 600, padding: '2px 8px', height: 28, borderRadius: 6, width: '100%', maxWidth: 200 }}
+                            />
+                            <motion.button
+                              whileTap={{ scale: 0.9 }}
+                              type="button"
+                              className="icon-btn"
+                              style={{ width: 26, height: 26, color: 'hsl(var(--primary))' }}
+                              onClick={() => {
+                                if (editingBoardName.trim() && editingBoardName.trim() !== board.name) {
+                                  renameBoard(board.id, editingBoardName.trim());
+                                  showToast(`Renamed to "${editingBoardName.trim()}"`, 'success');
+                                }
+                                setEditingBoardId(null);
+                              }}
+                              title="Save name"
+                            >
+                              <Check size={13} />
+                            </motion.button>
+                            <motion.button
+                              whileTap={{ scale: 0.9 }}
+                              type="button"
+                              className="icon-btn"
+                              style={{ width: 26, height: 26 }}
+                              onClick={() => setEditingBoardId(null)}
+                              title="Cancel"
+                            >
+                              <X size={13} />
+                            </motion.button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div
+                              style={{
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                backgroundColor: board.color,
+                                boxShadow: 'var(--neu-shadow-raised-sm)'
+                              }}
+                            />
+                            <span style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--foreground))' }}>
+                              {board.name}
+                            </span>
+                          </div>
+                        )}
                         <div
                           style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative', zIndex: 20 }}
                           onClick={e => e.stopPropagation()}
                         >
+                          {/* Rename board */}
+                          {(!board.createdBy || (user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) || (board.members && board.members.some(m => m.email && user?.email && m.email.toLowerCase().trim() === user.email.toLowerCase().trim() && m.role !== 'observer'))) && (
+                            <motion.button
+                              type="button"
+                              whileTap={{ scale: 0.88 }}
+                              className="icon-btn"
+                              style={{ width: 28, height: 28, minWidth: 28, minHeight: 28, cursor: 'pointer' }}
+                              title="Rename board"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingBoardId(board.id);
+                                setEditingBoardName(board.name);
+                              }}
+                            >
+                              <Pencil size={13} />
+                            </motion.button>
+                          )}
                           {!board.createdBy || (user?.email && board.createdBy.toLowerCase().trim() === user.email.toLowerCase().trim()) ? (
                             <motion.button
                               type="button"

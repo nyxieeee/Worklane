@@ -628,6 +628,16 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
         <SearchModal
           onClose={() => setShowSearch(false)}
           onOpenCard={(cardId, boardId) => handleOpenCard(cardId, boardId)}
+          onSelectBoard={boardId => {
+            handleSelectBoard(boardId);
+            setShowSearch(false);
+          }}
+          onFilterMember={memberId => {
+            setFilterMemberId(memberId);
+            setShowSearch(false);
+          }}
+          scope={page === 'board' ? 'board' : 'global'}
+          activeBoardId={page === 'board' ? activeBoardId : null}
         />
       )}
       {showSettings && (

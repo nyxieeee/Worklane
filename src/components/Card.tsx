@@ -126,11 +126,11 @@ export default function Card({
     >
       {/* Cover Image Thumbnail */}
       {coverAttachment && (
-        <div style={{ margin: '-14px -14px 10px -14px', borderRadius: '12px 12px 0 0', overflow: 'hidden', height: 110, backgroundColor: 'hsl(var(--secondary))' }}>
+        <div style={{ margin: '-14px -14px 10px -14px', borderRadius: '12px 12px 0 0', overflow: 'hidden', backgroundColor: 'hsl(var(--secondary))' }}>
           <img
             src={coverAttachment.dataUrl}
             alt={coverAttachment.name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }}
           />
         </div>
       )}

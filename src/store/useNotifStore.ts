@@ -16,6 +16,7 @@ interface NotifState {
     recipientEmail?: string | null
   ) => void;
   getNotificationsForUser: (userEmail?: string) => Notification[];
+  removeNotification: (id: string) => void;
   clearAll: (userEmail?: string) => void;
 }
 
@@ -84,6 +85,15 @@ export const useNotifStore = create<NotifState>()(
         if (!userEmail) return notifications.filter(n => !n.recipientEmail);
         const email = userEmail.toLowerCase().trim();
         return notifications.filter(n => !n.recipientEmail || n.recipientEmail === email);
+      },
+
+      removeNotification: (id: string) => {
+        set(s => ({
+          notifications: s.notifications.filter(n => n.id !== id)
+        }));
+        if (supabaseService.isConfigured()) {
+          supabaseService.deleteNotification(id);
+        }
       },
 
       clearAll: (userEmail) => {

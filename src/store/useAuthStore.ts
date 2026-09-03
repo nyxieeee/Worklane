@@ -454,13 +454,29 @@ export const useAuthStore = create<AuthState>()(
       signInWithGoogle: async (email?: string) => {
         if (isSupabaseConfigured()) {
           try {
-            if (window.location.search || window.location.hash) {
-              window.history.replaceState({}, document.title, window.location.origin);
+            // Check if there is an active invite link so we don't lose it!
+            const currentParams = new URLSearchParams(window.location.search);
+            const joinBoard = currentParams.get('joinBoard') || currentParams.get('invite');
+            const inviteRole = currentParams.get('role') || 'member';
+
+            let redirectTo = window.location.origin;
+            if (joinBoard) {
+              const inviteObj = { boardId: joinBoard, role: inviteRole };
+              try {
+                localStorage.setItem('worklane_pending_invite', JSON.stringify(inviteObj));
+                sessionStorage.setItem('worklane_pending_invite', JSON.stringify(inviteObj));
+              } catch {}
+              redirectTo = `${window.location.origin}/?joinBoard=${encodeURIComponent(joinBoard)}&role=${encodeURIComponent(inviteRole)}`;
+            } else {
+              if (window.location.search || window.location.hash) {
+                window.history.replaceState({}, document.title, window.location.origin);
+              }
             }
+
             const { error } = await supabase.auth.signInWithOAuth({
               provider: 'google',
               options: {
-                redirectTo: window.location.origin,
+                redirectTo,
                 queryParams: {
                   access_type: 'offline',
                   prompt: 'select_account',

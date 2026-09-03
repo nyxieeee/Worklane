@@ -492,29 +492,55 @@ export const supabaseService = {
         .select('id, avatar_url, name')
         .ilike('email', cleanEmail)
         .maybeSingle();
-
       const finalAvatar = prof?.avatar_url || member.avatarUrl || null;
       const finalName = prof?.name || member.name;
-      const finalUserId = userId || prof?.id || null;
+      // Only set user_id if prof?.id or userId is a valid UUID
+      const candidateId = userId || prof?.id;
+      const finalUserId = (candidateId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidateId))
+        ? candidateId
+        : null;
 
-      const memberPayload: any = {
-        id: member.id,
-        board_id: boardId,
-        name: finalName,
-        email: cleanEmail,
-        color: member.color,
-        avatar_url: finalAvatar,
-        role: member.role || 'member',
-      };
-      if (finalUserId) {
-        memberPayload.user_id = finalUserId;
-      }
+      // Check if this member is already in board_members
+      const { data: existingRows } = await supabase
+        .from('board_members')
+        .select('id')
+        .eq('board_id', boardId)
+        .ilike('email', cleanEmail);
 
-      const { error } = await supabase.from('board_members').upsert(memberPayload, { onConflict: 'board_id,email' });
+      if (existingRows && existingRows.length > 0) {
+        // Update existing member record
+        const updatePayload: any = {
+          name: finalName,
+          color: member.color || '#6366f1',
+          avatar_url: finalAvatar,
+          role: member.role || 'member',
+        };
+        if (finalUserId) updatePayload.user_id = finalUserId;
+        await supabase
+          .from('board_members')
+          .update(updatePayload)
+          .eq('id', existingRows[0].id);
+      } else {
+        // Insert new member record
+        const insertPayload: any = {
+          id: member.id || uid(),
+          board_id: boardId,
+          name: finalName,
+          email: cleanEmail,
+          color: member.color || '#6366f1',
+          avatar_url: finalAvatar,
+          role: member.role || 'member',
+        };
+        if (finalUserId) insertPayload.user_id = finalUserId;
 
-      if (error) {
-        console.error('[SupabaseService] Error adding member directly:', error);
-        return false;
+        const { error: insErr } = await supabase
+          .from('board_members')
+          .insert(insertPayload);
+
+        if (insErr) {
+          console.warn('[SupabaseService] Insert member fallback to upsert:', insErr);
+          await supabase.from('board_members').upsert(insertPayload, { onConflict: 'board_id,email' });
+        }
       }
 
       // Touch the boards table so Postgres WAL emits a boards UPDATE event across all listeners
@@ -557,7 +583,7 @@ export const supabaseService = {
         avatarUrl: p.avatar_url || undefined,
       }));
     } catch (err) {
-      console.warn('[SupabaseService] Exception searching profiles:', err);
+      console.warn('[SupabaseService] Search profiles exception:', err);
       return [];
     }
   },
@@ -593,6 +619,169 @@ export const supabaseService = {
       };
     } catch (err) {
       console.warn('[SupabaseService] Exception getting board metadata:', err);
+      return null;
+    }
+  },
+
+  /**
+   * Fetch a single board by ID with all its columns, cards, members, etc.
+   */
+  async getBoardById(boardId: string): Promise<Board | null> {
+    if (!isSupabaseConfigured() || !boardId) return null;
+    try {
+      const { data: b, error: bErr } = await supabase
+        .from('boards')
+        .select('*')
+        .eq('id', boardId)
+        .maybeSingle();
+
+      if (bErr || !b) {
+        console.warn('[SupabaseService] Error or board not found for ID:', boardId, bErr);
+        return null;
+      }
+
+      // Fetch members, columns, cards, and profiles
+      const [membersRes, colsRes, cardsRes, profilesRes] = await Promise.all([
+        supabase.from('board_members').select('*').eq('board_id', boardId),
+        supabase.from('columns').select('*').eq('board_id', boardId).order('position'),
+        supabase.from('cards').select('*').eq('board_id', boardId).order('position'),
+        supabase.from('profiles').select('email, name, avatar_url'),
+      ]);
+
+      const allMembers = membersRes.data || [];
+      const allCols = colsRes.data || [];
+      const allCards = cardsRes.data || [];
+      const allProfiles = profilesRes.data || [];
+      const cardIds = allCards.map(c => c.id);
+
+      const profileMap = new Map<string, { name?: string; avatar_url?: string }>();
+      allProfiles.forEach(p => {
+        if (p.email) profileMap.set(p.email.toLowerCase().trim(), p);
+      });
+
+      let allAssignees: any[] = [];
+      let allLabels: any[] = [];
+      let allComments: any[] = [];
+      let allAttachments: any[] = [];
+
+      if (cardIds.length > 0) {
+        const [assigneesRes, labelsRes, commentsRes, attachmentsRes] = await Promise.all([
+          supabase.from('card_assignees').select('*').in('card_id', cardIds),
+          supabase.from('card_labels').select('*').in('card_id', cardIds),
+          supabase.from('comments').select('*').in('card_id', cardIds).order('created_at'),
+          supabase.from('attachments').select('*').in('card_id', cardIds),
+        ]);
+
+        allAssignees = assigneesRes.data || [];
+        allLabels = labelsRes.data || [];
+        allComments = commentsRes.data || [];
+        allAttachments = attachmentsRes.data || [];
+      }
+
+      const bMembers: Member[] = sortMembersWithOwnerFirst(
+        allMembers.map(m => {
+          const mCleanEmail = m.email ? m.email.toLowerCase().trim() : '';
+          const realProfile = profileMap.get(mCleanEmail);
+          return {
+            id: m.id,
+            name: realProfile?.name || m.name,
+            email: m.email,
+            color: m.color || '#6366f1',
+            avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
+            role: (m.role as MemberRole) || 'member',
+          };
+        }),
+        b.created_by
+      );
+
+      const mapDbCardToCard = (card: any): Card => {
+        const cardAssigneeIds = allAssignees
+          .filter(a => a.card_id === card.id)
+          .map(a => a.member_id);
+
+        const cardLabelIds = allLabels
+          .filter(l => l.card_id === card.id)
+          .map(l => l.label_id);
+
+        const cardComments: Comment[] = allComments
+          .filter(cm => cm.card_id === card.id)
+          .map(cm => ({
+            id: cm.id,
+            author: cm.author,
+            authorInitials: cm.author_initials,
+            avatarColor: cm.avatar_color,
+            text: cm.text,
+            createdAt: cm.created_at,
+            parentId: cm.parent_id || null,
+            replyToAuthor: cm.reply_to_author || null,
+          }));
+
+        const cardAtts: Attachment[] = allAttachments
+          .filter(att => att.card_id === card.id)
+          .map(att => ({
+            id: att.id,
+            name: att.name,
+            size: att.size,
+            type: att.type,
+            dataUrl: att.data_url || '',
+            addedAt: att.added_at,
+          }));
+
+        return {
+          id: card.id,
+          title: card.title,
+          description: card.description || '',
+          priority: card.priority,
+          completed: card.completed,
+          completedAt: card.completed_at,
+          dueDate: card.due_date,
+          coverAttachmentId: card.cover_attachment_id,
+          createdAt: card.created_at,
+          isInbox: !!card.is_inbox,
+          assignees: cardAssigneeIds,
+          labels: cardLabelIds,
+          comments: cardComments,
+          attachments: cardAtts,
+        };
+      };
+
+      let bColumns: Column[] = allCols.map(col => {
+        const colCards: Card[] = allCards
+          .filter(card => card.column_id === col.id && !card.is_inbox)
+          .map(mapDbCardToCard);
+
+        return {
+          id: col.id,
+          name: col.name,
+          cards: colCards,
+        };
+      });
+
+      if (bColumns.length === 0) {
+        bColumns = [
+          { id: uid(), name: 'Urgent',      cards: [] },
+          { id: uid(), name: 'To Do',       cards: [] },
+          { id: uid(), name: 'In Progress', cards: [] },
+          { id: uid(), name: 'Review',      cards: [] },
+          { id: uid(), name: 'Done',        cards: [] },
+        ];
+      }
+
+      const bInboxCards: Card[] = allCards
+        .filter(card => card.board_id === b.id && card.is_inbox)
+        .map(mapDbCardToCard);
+
+      return {
+        id: b.id,
+        name: b.name,
+        color: b.color || '#6366f1',
+        createdBy: b.created_by,
+        members: bMembers,
+        columns: bColumns,
+        inboxCards: bInboxCards,
+      };
+    } catch (err) {
+      console.warn('[SupabaseService] Exception fetching board by ID:', err);
       return null;
     }
   },

@@ -75,11 +75,12 @@ export default function App() {
       const inviteObj = { boardId: joinBoardId, role: inviteRole };
       setPendingInvite(inviteObj);
       try {
+        localStorage.setItem('worklane_pending_invite', JSON.stringify(inviteObj));
         sessionStorage.setItem('worklane_pending_invite', JSON.stringify(inviteObj));
       } catch {}
     } else {
       try {
-        const saved = sessionStorage.getItem('worklane_pending_invite');
+        const saved = localStorage.getItem('worklane_pending_invite') || sessionStorage.getItem('worklane_pending_invite');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed?.boardId) {
@@ -494,13 +495,19 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
           boardId={pendingInvite.boardId}
           role={pendingInvite.role}
           onAcceptJoin={(boardId) => {
-            sessionStorage.removeItem('worklane_pending_invite');
+            try {
+              localStorage.removeItem('worklane_pending_invite');
+              sessionStorage.removeItem('worklane_pending_invite');
+            } catch {}
             window.history.replaceState({}, document.title, window.location.pathname);
             setPendingInvite(null);
             handleSelectBoard(boardId);
           }}
           onDecline={() => {
-            sessionStorage.removeItem('worklane_pending_invite');
+            try {
+              localStorage.removeItem('worklane_pending_invite');
+              sessionStorage.removeItem('worklane_pending_invite');
+            } catch {}
             window.history.replaceState({}, document.title, window.location.pathname);
             setPendingInvite(null);
             setPage('dashboard');

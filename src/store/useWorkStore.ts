@@ -24,6 +24,7 @@ interface WorkState {
   renameBoard: (boardId: string, name: string) => void;
   leaveBoard: (boardId: string, userEmail: string) => void;
   switchBoard: (boardId: string) => void;
+  joinBoardFromCloud: (boardId: string, role: MemberRole, user: { name?: string; email: string; avatarUrl?: string }) => Promise<Board | null>;
   syncCurrentUserProfile: (user: { name?: string; email?: string; avatarUrl?: string }) => void;
   removeUserFromAllBoards: (userEmail: string) => void;
 
@@ -422,6 +423,47 @@ export const useWorkStore = create<WorkState>()(
       },
 
       switchBoard: (boardId) => set({ activeBoardId: boardId }),
+
+      joinBoardFromCloud: async (boardId, role, user) => {
+        const cleanEmail = user.email.toLowerCase().trim();
+        const memberId = uid();
+        const newMember: Member = {
+          id: memberId,
+          name: user.name || cleanEmail.split('@')[0],
+          email: cleanEmail,
+          color: '#6366f1',
+          avatarUrl: user.avatarUrl,
+          role: role || 'member',
+        };
+
+        // 1. Add member to Supabase database
+        await supabaseService.addMember(boardId, newMember);
+
+        // 2. Fetch full board with columns, cards, and tasks directly from Supabase
+        let joinedBoard = await supabaseService.getBoardById(boardId);
+
+        // 3. Fallback: if getBoardById returned null, try loadBoardsFromCloud
+        if (!joinedBoard) {
+          await get().loadBoardsFromCloud(cleanEmail);
+          joinedBoard = get().boards.find(b => b.id === boardId) || null;
+        }
+
+        // 4. If we have the joinedBoard, ensure member is in members list & merge directly into local store
+        if (joinedBoard) {
+          if (!joinedBoard.members.some(m => m.email?.toLowerCase().trim() === cleanEmail)) {
+            joinedBoard.members.push(newMember);
+          }
+          set(s => {
+            const otherBoards = s.boards.filter(b => b.id !== boardId);
+            return {
+              boards: [joinedBoard!, ...otherBoards],
+              activeBoardId: boardId,
+            };
+          });
+        }
+
+        return joinedBoard;
+      },
 
       // ── Column actions ─────────────────────────────────
       addColumn: (name) => {

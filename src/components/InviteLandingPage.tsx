@@ -73,23 +73,17 @@ export default function InviteLandingPage({ boardId, role = 'member', onAcceptJo
     return () => { isMounted = false; };
   }, [boardId]);
 
-  const handleJoin = async () => {
-    if (!currentUser?.email) return;
+  const joinBoardFromCloud = useWorkStore(s => s.joinBoardFromCloud);
+
+  const executeJoinForUser = async (targetUser: { name?: string; email: string; avatarUrl?: string }) => {
+    if (!targetUser?.email) return;
     setIsJoining(true);
     try {
-      const cleanEmail = currentUser.email.toLowerCase().trim();
-      const userName = currentUser.name || cleanEmail.split('@')[0];
-      const avatarUrl = currentUser.avatarUrl;
+      const cleanEmail = targetUser.email.toLowerCase().trim();
+      const userName = targetUser.name || cleanEmail.split('@')[0];
 
-      // 1. Add member to Supabase board_members
-      await supabaseService.addMember(boardId, {
-        id: uid(),
-        name: userName,
-        email: cleanEmail,
-        color: '#6366f1',
-        avatarUrl,
-        role: role || 'member',
-      });
+      // 1. Join board and directly retrieve board with all columns and tasks
+      const joinedBoard = await joinBoardFromCloud(boardId, role || 'member', targetUser);
 
       // 2. Notify the creator in real-time
       if (boardMeta?.createdBy && boardMeta.createdBy.toLowerCase().trim() !== cleanEmail) {
@@ -114,16 +108,19 @@ export default function InviteLandingPage({ boardId, role = 'member', onAcceptJo
       // 3. Broadcast instant board update across all devices
       await supabaseService.broadcastUpdate('boards', { boardId, memberEmail: cleanEmail });
 
-      // 4. Reload boards
-      await loadBoardsFromCloud(cleanEmail);
-
-      // 5. Trigger accept callback
+      // 4. Trigger accept callback
       onAcceptJoin(boardId);
-      showToast(`Welcome to "${boardMeta?.name || 'the board'}"! You joined as ${role === 'admin' ? 'an Admin' : role === 'observer' ? 'an Observer' : 'a Member'}.`, 'success');
+      showToast(`Welcome to "${boardMeta?.name || joinedBoard?.name || 'the board'}"! You joined as ${role === 'admin' ? 'an Admin' : role === 'observer' ? 'an Observer' : 'a Member'}.`, 'success');
     } catch (err: any) {
       showToast(err.message || 'Failed to join board', 'error');
     } finally {
       setIsJoining(false);
+    }
+  };
+
+  const handleJoin = async () => {
+    if (currentUser) {
+      await executeJoinForUser(currentUser);
     }
   };
 
@@ -161,6 +158,8 @@ export default function InviteLandingPage({ boardId, role = 'member', onAcceptJo
           setAuthLoading(false);
           return;
         }
+        const loggedUser = useAuthStore.getState().user || { email: email.trim() };
+        await executeJoinForUser(loggedUser);
       } else {
         const res = await signUpWithEmail(name.trim(), email.trim(), password);
         if (!res.success) {
@@ -168,7 +167,9 @@ export default function InviteLandingPage({ boardId, role = 'member', onAcceptJo
           setAuthLoading(false);
           return;
         }
-        showToast('Account created! Logging in...', 'success');
+        showToast('Account created! Joining board...', 'success');
+        const loggedUser = useAuthStore.getState().user || { name: name.trim(), email: email.trim() };
+        await executeJoinForUser(loggedUser);
       }
     } catch (err: any) {
       showToast(err.message || 'Authentication error', 'error');

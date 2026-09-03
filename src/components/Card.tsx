@@ -10,6 +10,7 @@ import { LABELS, type Card as CardType } from '../types';
 import { getDueStatus, formatDueDate, avatarInitials } from '../utils';
 import { useWorkStore } from '../store/useWorkStore';
 import { useSettingsStore } from '../store/useSettingsStore';
+import AvatarBorder from './ui/AvatarBorder';
 
 interface Props {
   card: CardType;
@@ -227,13 +228,15 @@ export default function Card({
           {assignees.length > 0 && (
             <div className="card-assignees">
               {assignees.map(m => m && (
-                m.avatarUrl ? (
-                  <img key={m.id} src={m.avatarUrl} alt={m.name} className="card-avatar" title={m.name} />
-                ) : (
-                  <div key={m.id} className="card-avatar" style={{ backgroundColor: m.color }} title={m.name}>
-                    {avatarInitials(m.name)}
-                  </div>
-                )
+                <AvatarBorder key={m.id} borderStyle={m.borderStyle} size={22} title={m.name}>
+                  {m.avatarUrl ? (
+                    <img src={m.avatarUrl} alt={m.name} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: m.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>
+                      {avatarInitials(m.name)}
+                    </div>
+                  )}
+                </AvatarBorder>
               ))}
             </div>
           )}

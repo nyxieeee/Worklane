@@ -13,6 +13,7 @@ import { useEmailStore } from '../../store/useEmailStore';
 import { useToastStore } from '../../store/useToastStore';
 import { useConfirmStore } from '../../store/useConfirmStore';
 import { avatarInitials } from '../../utils';
+import ProfileBorderPicker from '../ui/ProfileBorderPicker';
 
 type TabKey = 'profile' | 'appearance' | 'notifications' | 'email' | 'privacy' | 'labels';
 
@@ -64,6 +65,7 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
   // Profile Edit Local State
   const [displayName, setDisplayName] = useState(user?.name || '');
   const [customAvatarUrl, setCustomAvatarUrl] = useState(user?.avatarUrl || '');
+  const [borderStyle, setBorderStyle] = useState(user?.borderStyle || 'none');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -125,6 +127,7 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
       const res = await updateUserProfile({
         name: displayName.trim(),
         avatarUrl: customAvatarUrl || undefined,
+        borderStyle: borderStyle || 'none',
       });
 
       if (res.success) {
@@ -498,8 +501,25 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
                   </div>
                 </div>
 
+                {/* Avatar Border Customization */}
+                <div style={{ paddingTop: 4, borderTop: '1px solid hsl(var(--border) / 0.5)' }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <h4 style={{ fontSize: 13.5, fontWeight: 700, color: 'hsl(var(--foreground))', marginBottom: 3 }}>Profile Border Style</h4>
+                    <p style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))' }}>
+                      Choose a border to display around your avatar — useful for IT role identification or personal flair.
+                    </p>
+                  </div>
+                  <ProfileBorderPicker
+                    name={displayName || user?.name || 'User'}
+                    avatarUrl={customAvatarUrl || undefined}
+                    color="hsl(var(--primary))"
+                    value={borderStyle}
+                    onChange={setBorderStyle}
+                  />
+                </div>
+
                 {/* Display Name & Email Fields */}
-                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4, borderTop: '1px solid hsl(var(--border) / 0.5)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     <label style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>
                       Display Name

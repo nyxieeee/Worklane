@@ -1246,3 +1246,23 @@ html, body, #root {
   border: 1px solid hsl(var(--border) / 0.5);
   backdrop-filter: blur(12px);
 }
+
+/* ══════════════════════════════════════════════════════════
+   AVATAR BORDER — Gradient + Animated Rainbow
+   ══════════════════════════════════════════════════════════ */
+
+@keyframes avatar-border-spin {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.avatar-border-animated {
+  background-size: 300% 300% !important;
+  animation: avatar-border-spin 3s linear infinite;
+}
+
+/* Ensure wrapped inner content sits on top */
+.avatar-border-wrap > div {
+  background-color: hsl(var(--card));
+}

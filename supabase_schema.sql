@@ -37,6 +37,7 @@ create table public.profiles (
   name text,
   email text unique not null,
   avatar_url text,
+  border_style text default 'none',
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
 );
@@ -98,6 +99,7 @@ create table public.board_members (
   email text not null,
   color text default '#6366f1' not null,
   avatar_url text,
+  border_style text default 'none',
   role text default 'member' not null,
   added_at timestamptz default now() not null,
   unique (board_id, email)
@@ -392,4 +394,15 @@ begin
 end;
 $$ language plpgsql security definer;
 
+
+-- ==============================================================================
+-- 20. MIGRATION — Add border_style columns (run if upgrading an existing DB)
+-- ==============================================================================
+-- Run these ALTER TABLE statements if you already have the tables and just need
+-- to add the new border_style column (safe to run on existing databases):
+--
+-- alter table public.profiles add column if not exists border_style text default 'none';
+-- alter table public.board_members add column if not exists border_style text default 'none';
+--
+-- ==============================================================================
 

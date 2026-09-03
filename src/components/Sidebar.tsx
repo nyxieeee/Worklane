@@ -12,7 +12,8 @@ import { useSettingsStore } from '../store/useSettingsStore';
 import { useThemeStore } from '../store/useThemeStore';
 import { useToastStore } from '../store/useToastStore';
 import { useConfirmStore } from '../store/useConfirmStore';
-import { avatarInitials, sortMembersWithOwnerFirst } from '../utils';
+import { avatarInitials, sortMembersWithOwnerFirst, getTeamBadgeInfo } from '../utils';
+import AvatarBorder from './ui/AvatarBorder';
 import sidebarImg from '../assets/sidebar.png';
 import sidebarDarkImg from '../assets/sidebar-dark.png';
 import logoImg from '../assets/logo.png';
@@ -535,23 +536,37 @@ export default function Sidebar({
                   ? user.name
                   : m.name;
 
+                const badge = getTeamBadgeInfo(m.borderStyle);
+
                 return (
                   <motion.button
                     whileTap={{ scale: 0.97 }}
                     key={m.id}
                     className={`sidebar-nav-item ${filterMemberId === m.id ? 'active' : ''}`}
                     onClick={() => onFilterMember(filterMemberId === m.id ? null : m.id)}
+                    style={{ gap: 8 }}
                   >
-                    {m.avatarUrl ? (
-                      <img src={m.avatarUrl} alt={displayName} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: 18, height: 18, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {avatarInitials(displayName)}
-                      </div>
-                    )}
+                    <AvatarBorder borderStyle={m.borderStyle} size={18}>
+                      {m.avatarUrl ? (
+                        <img src={m.avatarUrl} alt={displayName} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: 18, height: 18, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {avatarInitials(displayName)}
+                        </div>
+                      )}
+                    </AvatarBorder>
                     <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {displayName}
                     </span>
+                    {badge && (
+                      <span style={{
+                        fontSize: 8.5, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+                        background: badge.bg, color: badge.color,
+                        flexShrink: 0
+                      }}>
+                        {badge.label.replace(' Dev', '')}
+                      </span>
+                    )}
                     {filterMemberId === m.id && <Check size={13} color="hsl(var(--primary))" />}
                   </motion.button>
                 );

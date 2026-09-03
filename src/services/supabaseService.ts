@@ -19,7 +19,7 @@ export const supabaseService = {
   /**
    * Upsert current user profile (with avatar URL & name), and propagate to board_members
    */
-  async upsertProfile(user: { id?: string; name?: string; email: string; avatarUrl?: string }): Promise<boolean> {
+  async upsertProfile(user: { id?: string; name?: string; email: string; avatarUrl?: string; borderStyle?: string }): Promise<boolean> {
     if (!isSupabaseConfigured() || !user?.email) return false;
     try {
       const cleanEmail = user.email.toLowerCase().trim();
@@ -27,6 +27,7 @@ export const supabaseService = {
         name: user.name || cleanEmail.split('@')[0],
         email: cleanEmail,
         avatar_url: user.avatarUrl || null,
+        border_style: user.borderStyle || 'none',
         updated_at: new Date().toISOString(),
       };
       if (user.id) profileRow.id = user.id;
@@ -36,11 +37,12 @@ export const supabaseService = {
         console.warn('[SupabaseService] Upsert profile warning:', error);
       }
 
-      // Also propagate avatar_url across all board_members records for this user
-      if (user.avatarUrl || user.name) {
+      // Also propagate avatar_url and border_style across all board_members records for this user
+      if (user.avatarUrl || user.name || user.borderStyle) {
         const updates: any = {};
         if (user.avatarUrl) updates.avatar_url = user.avatarUrl;
         if (user.name) updates.name = user.name;
+        if (user.borderStyle !== undefined) updates.border_style = user.borderStyle || 'none';
         await supabase.from('board_members').update(updates).ilike('email', cleanEmail);
       }
 
@@ -100,7 +102,7 @@ export const supabaseService = {
         supabase.from('board_members').select('*').in('board_id', boardIds),
         supabase.from('columns').select('*').in('board_id', boardIds).order('position'),
         supabase.from('cards').select('*').in('board_id', boardIds).order('position'),
-        supabase.from('profiles').select('email, name, avatar_url')
+        supabase.from('profiles').select('email, name, avatar_url, border_style')
       ]);
 
       const allMembers = membersRes.data || [];
@@ -109,8 +111,8 @@ export const supabaseService = {
       const allProfiles = profilesRes.data || [];
       const cardIds = allCards.map(c => c.id);
 
-      // Map registered profiles by lowercase email for fast avatar lookup
-      const profileMap = new Map<string, { name?: string; avatar_url?: string }>();
+      // Map registered profiles by lowercase email for fast avatar + border lookup
+      const profileMap = new Map<string, { name?: string; avatar_url?: string; border_style?: string }>();
       allProfiles.forEach(p => {
         if (p.email) {
           profileMap.set(p.email.toLowerCase().trim(), p);
@@ -153,6 +155,7 @@ export const supabaseService = {
                 color: m.color || '#6366f1',
                 avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
                 role: (m.role as MemberRole) || 'member',
+                borderStyle: realProfile?.border_style || m.border_style || undefined,
               };
             }),
           b.created_by

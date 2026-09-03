@@ -9,6 +9,7 @@ export interface Member {
   color: string;
   avatarUrl?: string;
   role?: MemberRole;
+  borderStyle?: string; // e.g. 'frontend', 'backend', 'gold', 'none'
 }
 
 export interface Attachment {
@@ -95,6 +96,42 @@ export interface EmailSettings {
   notifyOnMention: boolean;
   senderEmail: string;
 }
+
+// ── Border Style Presets ───────────────────────────────────────────────
+
+export interface BorderPreset {
+  key: string;
+  label: string;
+  group: 'it' | 'general';
+  /** CSS gradient/color string for the border ring */
+  gradient: string;
+  /** Optional: animated (e.g. rainbow) */
+  animated?: boolean;
+}
+
+export const BORDER_PRESETS: BorderPreset[] = [
+  // ── IT / Tech Roles ──────────────────────────────────────────────────
+  { key: 'frontend',  label: 'Frontend Dev',  group: 'it',      gradient: 'linear-gradient(135deg, #0ea5e9, #06b6d4, #38bdf8)' },
+  { key: 'backend',   label: 'Backend Dev',   group: 'it',      gradient: 'linear-gradient(135deg, #f97316, #fb923c, #f59e0b)' },
+  { key: 'devops',    label: 'DevOps / Cloud', group: 'it',     gradient: 'linear-gradient(135deg, #10b981, #14b8a6, #34d399)' },
+  { key: 'designer',  label: 'UI/UX Designer', group: 'it',     gradient: 'linear-gradient(135deg, #ec4899, #f43f5e, #fb7185)' },
+  { key: 'qa',        label: 'QA / Testing',  group: 'it',      gradient: 'linear-gradient(135deg, #8b5cf6, #6366f1, #a78bfa)' },
+  { key: 'fullstack', label: 'Full-Stack Dev', group: 'it',     gradient: 'linear-gradient(135deg, #6366f1, #0ea5e9, #10b981, #f59e0b)' },
+  { key: 'mobile',    label: 'Mobile Dev',    group: 'it',      gradient: 'linear-gradient(135deg, #f59e0b, #eab308, #fbbf24)' },
+  { key: 'data',      label: 'Data / ML',     group: 'it',      gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6, #d946ef)' },
+  // ── General ───────────────────────────────────────────────────────────
+  { key: 'none',      label: 'No Border',     group: 'general', gradient: 'none' },
+  { key: 'solid',     label: 'Classic',       group: 'general', gradient: 'hsl(var(--primary))' },
+  { key: 'gold',      label: 'Gold ✦',        group: 'general', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24, #d97706)' },
+  { key: 'silver',    label: 'Silver',        group: 'general', gradient: 'linear-gradient(135deg, #94a3b8, #cbd5e1, #64748b)' },
+  { key: 'rose',      label: 'Rose',          group: 'general', gradient: 'linear-gradient(135deg, #f43f5e, #fb7185, #fda4af)' },
+  { key: 'ocean',     label: 'Ocean',         group: 'general', gradient: 'linear-gradient(135deg, #0ea5e9, #38bdf8, #0284c7)' },
+  { key: 'forest',    label: 'Forest',        group: 'general', gradient: 'linear-gradient(135deg, #16a34a, #22c55e, #15803d)' },
+  { key: 'sunset',    label: 'Sunset',        group: 'general', gradient: 'linear-gradient(135deg, #f97316, #ef4444, #ec4899)' },
+  { key: 'rainbow',   label: 'Rainbow 🌈',    group: 'general', gradient: 'linear-gradient(135deg, #f43f5e, #f97316, #f59e0b, #10b981, #0ea5e9, #8b5cf6)', animated: true },
+  { key: 'glow',      label: 'Neon Glow',     group: 'general', gradient: 'hsl(var(--primary))' },
+  { key: 'dashed',    label: 'Dashed',        group: 'general', gradient: 'hsl(var(--primary))' },
+];
 
 // ── Constants ──────────────────────────────────────────────────────────
 

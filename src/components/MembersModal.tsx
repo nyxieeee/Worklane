@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye,
   Crown, Info, Lock, Search, Link2, Copy, Check, Sparkles,
-  UserCheck, Loader2, Mail
+  UserCheck, Loader2, Mail, Palette, Globe, Server, Cpu, Users, Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -11,9 +11,11 @@ import { useConfirmStore } from '../store/useConfirmStore';
 import { useNotifStore } from '../store/useNotifStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useEmailStore } from '../store/useEmailStore';
-import { avatarInitials, sortMembersWithOwnerFirst, uid } from '../utils';
+import { avatarInitials, sortMembersWithOwnerFirst, uid, getMemberTeamCategory, getTeamBadgeInfo } from '../utils';
 import { NeumorphicSelect, SelectOption } from './ui/NeumorphicSelect';
-import { Member, MemberRole } from '../types';
+import AvatarBorder from './ui/AvatarBorder';
+import ProfileBorderPicker from './ui/ProfileBorderPicker';
+import { Member, MemberRole, BORDER_PRESETS } from '../types';
 import { supabaseService } from '../services/supabaseService';
 
 interface Props {
@@ -64,6 +66,14 @@ export default function MembersModal({ onClose }: Props) {
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [showInviteTab, setShowInviteTab] = useState(false);
 
+  // Border style override state (owner can set any member's border)
+  const [borderPickerMemberId, setBorderPickerMemberId] = useState<string | null>(null);
+  const [pendingBorderStyle, setPendingBorderStyle] = useState<string>('none');
+
+  // Team Filtering & Grouping
+  const [teamFilter, setTeamFilter] = useState<'all' | 'frontend' | 'backend' | 'tech' | 'general'>('all');
+  const [groupByTeam, setGroupByTeam] = useState<boolean>(true);
+
   const searchTimeoutRef = useRef<number | undefined>(undefined);
 
   const updateMemberRole = useWorkStore(s => s.updateMemberRole);
@@ -72,6 +82,11 @@ export default function MembersModal({ onClose }: Props) {
     () => sortMembersWithOwnerFirst(board?.members || [], board?.createdBy),
     [board?.members, board?.createdBy]
   );
+
+  const frontendMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'frontend'), [members]);
+  const backendMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'backend'), [members]);
+  const techMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'tech'), [members]);
+  const generalMembers = useMemo(() => members.filter(m => getMemberTeamCategory(m.borderStyle) === 'general'), [members]);
 
   if (!board) return null;
   const currentEmail = currentUser?.email?.toLowerCase().trim();
@@ -203,6 +218,301 @@ export default function MembersModal({ onClose }: Props) {
 
   const inviteUrl = `${window.location.origin}/?joinBoard=${board.id}&role=${inviteRole}`;
 
+  const renderMemberItem = (member: Member) => {
+    const isCurrent = !!(member.email && currentEmail && member.email.toLowerCase().trim() === currentEmail);
+    const isMemberOwner = !!(board.createdBy && member.email && board.createdBy.toLowerCase().trim() === member.email.toLowerCase().trim());
+    const memberRole: MemberRole = isMemberOwner ? 'owner' : (member.role || 'member');
+    const badge = getTeamBadgeInfo(member.borderStyle);
+
+    return (
+      <React.Fragment key={member.id}>
+        <motion.div
+          layout
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '9px 12px',
+            borderRadius: 12,
+            backgroundColor: 'hsl(var(--card))',
+            boxShadow: 'var(--neu-shadow-raised-sm)',
+            gap: 10
+          }}
+        >
+          {/* Avatar */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <AvatarBorder borderStyle={member.borderStyle} size={34}>
+              {member.avatarUrl ? (
+                <img
+                  src={member.avatarUrl}
+                  alt={member.name}
+                  style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    backgroundColor: member.color || 'hsl(var(--primary))',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 12,
+                    fontWeight: 700
+                  }}
+                >
+                  {avatarInitials(member.name)}
+                </div>
+              )}
+            </AvatarBorder>
+            {isCurrent && (
+              <label
+                title="Change photo"
+                style={{
+                  position: 'absolute',
+                  bottom: -2,
+                  right: -2,
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  backgroundColor: 'hsl(var(--primary))',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <Camera size={8} />
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleAvatarUpload(e, member.id)} />
+              </label>
+            )}
+          </div>
+
+          {/* Name & Email */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {member.name}
+              </span>
+              {isCurrent && (
+                <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
+                  You
+                </span>
+              )}
+              {badge ? (
+                <span style={{
+                  fontSize: 9.5, fontWeight: 700, padding: '1.5px 7px', borderRadius: 9999,
+                  background: badge.bg,
+                  color: badge.color,
+                  display: 'inline-flex', alignItems: 'center', gap: 3.5,
+                  boxShadow: 'var(--neu-shadow-raised-sm)'
+                }}>
+                  <span>{badge.icon}</span>
+                  <span>{badge.label}</span>
+                </span>
+              ) : member.borderStyle && member.borderStyle !== 'none' ? (() => {
+                const bp = BORDER_PRESETS.find(p => p.key === member.borderStyle);
+                return bp ? (
+                  <span style={{
+                    fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 9999,
+                    background: 'hsl(var(--muted))',
+                    color: 'hsl(var(--muted-foreground))',
+                  }}>
+                    {bp.label}
+                  </span>
+                ) : null;
+              })() : null}
+            </div>
+            {member.email && (
+              <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {member.email}
+              </div>
+            )}
+          </div>
+
+          {/* Role Badge / Role Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {isMemberOwner ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 10px',
+                  borderRadius: 9999,
+                  backgroundColor: 'hsl(var(--primary) / 0.12)',
+                  color: 'hsl(var(--primary))',
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  boxShadow: 'var(--neu-shadow-raised-sm)',
+                }}
+              >
+                <Crown size={12} />
+                <span>Owner</span>
+              </div>
+            ) : canManage ? (
+              <NeumorphicSelect
+                value={memberRole as AssignableRole}
+                options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
+                onChange={(newRole) => {
+                  updateMemberRole(board.id, member.id, newRole);
+                  showToast(`Updated ${member.name}'s role to ${newRole}`, 'success');
+                }}
+                size="sm"
+              />
+            ) : (
+              <div
+                style={{
+                  padding: '3px 8px',
+                  borderRadius: 9999,
+                  backgroundColor: 'hsl(var(--card))',
+                  boxShadow: 'var(--neu-shadow-input)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: memberRole === 'admin' ? 'hsl(var(--primary))' : memberRole === 'observer' ? '#f59e0b' : 'hsl(var(--foreground))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                {memberRole === 'admin' ? <Shield size={11} /> : memberRole === 'observer' ? <Eye size={11} /> : <User size={11} />}
+                <span style={{ textTransform: 'capitalize' }}>{memberRole}</span>
+              </div>
+            )}
+
+            {/* Border Style / Role button — owner can assign, member can see their own */}
+            {(isOwner || isCurrent) && (
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  if (borderPickerMemberId === member.id) {
+                    setBorderPickerMemberId(null);
+                  } else {
+                    setBorderPickerMemberId(member.id);
+                    setPendingBorderStyle(member.borderStyle || 'none');
+                  }
+                }}
+                style={{
+                  background: borderPickerMemberId === member.id ? 'hsl(var(--primary) / 0.12)' : 'none',
+                  border: borderPickerMemberId === member.id ? '1px solid hsl(var(--primary) / 0.4)' : 'none',
+                  cursor: 'pointer',
+                  color: borderPickerMemberId === member.id ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
+                  padding: 4,
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.12s',
+                }}
+                title={isOwner && !isCurrent ? `Set team role & border for ${member.name}` : 'Change your team role & border'}
+              >
+                <Palette size={13} />
+              </motion.button>
+            )}
+
+            {/* Delete Member Button */}
+            {canManage && !isMemberOwner && (
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => {
+                  showConfirm({
+                    title: `Remove ${member.name}?`,
+                    message: `Are you sure you want to remove ${member.name} from this board?`,
+                    confirmText: 'Remove Member',
+                    variant: 'danger',
+                    icon: 'trash',
+                    onConfirm: () => {
+                      removeMember(member.id);
+                      showToast(`Removed ${member.name}`, 'info');
+                    }
+                  });
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'hsl(var(--destructive))',
+                  padding: 4,
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title="Remove from board"
+              >
+                <Trash2 size={14} />
+              </motion.button>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Inline Border Picker Panel (expandable) */}
+        <AnimatePresence>
+          {borderPickerMemberId === member.id && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{
+                padding: '14px',
+                borderRadius: 12,
+                backgroundColor: 'hsl(var(--background))',
+                boxShadow: 'var(--neu-shadow-input)',
+                border: '1px solid hsl(var(--primary) / 0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Palette size={13} color="hsl(var(--primary))" />
+                  {isOwner && !isCurrent ? `Set Team / Border Role for ${member.name}` : 'Your Team / Border Style'}
+                </div>
+                <ProfileBorderPicker
+                  name={member.name}
+                  avatarUrl={member.avatarUrl}
+                  color={member.color}
+                  value={pendingBorderStyle}
+                  onChange={setPendingBorderStyle}
+                />
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: 12, padding: '6px 14px' }}
+                    onClick={() => setBorderPickerMemberId(null)}
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: 12, padding: '6px 16px' }}
+                    onClick={() => {
+                      updateMember(member.id, { borderStyle: pendingBorderStyle });
+                      setBorderPickerMemberId(null);
+                      const label = BORDER_PRESETS.find(p => p.key === pendingBorderStyle)?.label || pendingBorderStyle;
+                      showToast(`Set team role & border to "${label}" for ${member.name}`, 'success');
+                    }}
+                  >
+                    Apply Team Role
+                  </motion.button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </React.Fragment>
+    );
+  };
+
   return (
     <div className="modal-overlay" style={{ perspective: 1200 }} onClick={onClose}>
       <motion.div
@@ -234,193 +544,257 @@ export default function MembersModal({ onClose }: Props) {
         </div>
 
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', overflowX: 'visible', maxHeight: '72vh', paddingBottom: 16 }}>
+          
+          {/* Team Filter / Navigation Pills */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    border: teamFilter === 'all' ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
+                    backgroundColor: teamFilter === 'all' ? 'hsl(var(--primary) / 0.12)' : 'hsl(var(--card))',
+                    color: teamFilter === 'all' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onClick={() => setTeamFilter('all')}
+                >
+                  <Users size={12} />
+                  <span>All ({members.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    border: teamFilter === 'frontend' ? '1.5px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.35)',
+                    backgroundColor: teamFilter === 'frontend' ? 'rgba(14, 165, 233, 0.15)' : 'hsl(var(--card))',
+                    color: '#0284c7',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onClick={() => setTeamFilter('frontend')}
+                >
+                  <Globe size={12} />
+                  <span>Frontend ({frontendMembers.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    border: teamFilter === 'backend' ? '1.5px solid #ea580c' : '1px solid rgba(249, 115, 22, 0.35)',
+                    backgroundColor: teamFilter === 'backend' ? 'rgba(249, 115, 22, 0.15)' : 'hsl(var(--card))',
+                    color: '#ea580c',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onClick={() => setTeamFilter('backend')}
+                >
+                  <Server size={12} />
+                  <span>Backend ({backendMembers.length})</span>
+                </button>
+
+                {techMembers.length > 0 && (
+                  <button
+                    type="button"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      border: teamFilter === 'tech' ? '1.5px solid #7c3aed' : '1px solid rgba(124, 58, 237, 0.35)',
+                      backgroundColor: teamFilter === 'tech' ? 'rgba(124, 58, 237, 0.15)' : 'hsl(var(--card))',
+                      color: '#7c3aed',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      transition: 'all 0.15s ease'
+                    }}
+                    onClick={() => setTeamFilter('tech')}
+                  >
+                    <Cpu size={12} />
+                    <span>Other Tech ({techMembers.length})</span>
+                  </button>
+                )}
+
+                {generalMembers.length > 0 && (
+                  <button
+                    type="button"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      border: teamFilter === 'general' ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
+                      backgroundColor: teamFilter === 'general' ? 'hsl(var(--primary) / 0.12)' : 'hsl(var(--card))',
+                      color: teamFilter === 'general' ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      transition: 'all 0.15s ease'
+                    }}
+                    onClick={() => setTeamFilter('general')}
+                  >
+                    <span>General ({generalMembers.length})</span>
+                  </button>
+                )}
+              </div>
+
+              {teamFilter === 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setGroupByTeam(v => !v)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 11,
+                    color: 'hsl(var(--primary))',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}
+                  title="Toggle team sections"
+                >
+                  <Layers size={12} />
+                  <span>{groupByTeam ? 'Grouped by Team' : 'Flat List'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Current Members List */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {members.length === 0 ? (
               <div style={{ padding: '16px', textAlign: 'center', color: 'hsl(var(--muted-foreground))', fontSize: 13 }}>
                 No members found
               </div>
+            ) : teamFilter === 'frontend' ? (
+              frontendMembers.length === 0 ? (
+                <div style={{
+                  padding: '24px 16px', textAlign: 'center', borderRadius: 12,
+                  backgroundColor: 'rgba(14, 165, 233, 0.05)', border: '1px dashed rgba(14, 165, 233, 0.3)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6
+                }}>
+                  <Globe size={24} style={{ color: '#0284c7' }} />
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Frontend Members Yet</div>
+                  <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
+                    Switch to "All", then click the 🎨 palette button on any member to set their role & border to <strong>Frontend Dev</strong>.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {frontendMembers.map(renderMemberItem)}
+                </div>
+              )
+            ) : teamFilter === 'backend' ? (
+              backendMembers.length === 0 ? (
+                <div style={{
+                  padding: '24px 16px', textAlign: 'center', borderRadius: 12,
+                  backgroundColor: 'rgba(249, 115, 22, 0.05)', border: '1px dashed rgba(249, 115, 22, 0.3)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6
+                }}>
+                  <Server size={24} style={{ color: '#ea580c' }} />
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Backend Members Yet</div>
+                  <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
+                    Switch to "All", then click the 🎨 palette button on any member to set their role & border to <strong>Backend Dev</strong>.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {backendMembers.map(renderMemberItem)}
+                </div>
+              )
+            ) : teamFilter === 'tech' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {techMembers.map(renderMemberItem)}
+              </div>
+            ) : teamFilter === 'general' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {generalMembers.map(renderMemberItem)}
+              </div>
+            ) : groupByTeam ? (
+              /* Grouped by Team View */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {frontendMembers.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{
+                      fontSize: 11.5, fontWeight: 700, color: '#0284c7',
+                      display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em', textTransform: 'uppercase'
+                    }}>
+                      <Globe size={12} /> Frontend Team ({frontendMembers.length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {frontendMembers.map(renderMemberItem)}
+                    </div>
+                  </div>
+                )}
+
+                {backendMembers.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{
+                      fontSize: 11.5, fontWeight: 700, color: '#ea580c',
+                      display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em', textTransform: 'uppercase'
+                    }}>
+                      <Server size={12} /> Backend Team ({backendMembers.length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {backendMembers.map(renderMemberItem)}
+                    </div>
+                  </div>
+                )}
+
+                {techMembers.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{
+                      fontSize: 11.5, fontWeight: 700, color: '#7c3aed',
+                      display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em', textTransform: 'uppercase'
+                    }}>
+                      <Cpu size={12} /> Other Tech Roles ({techMembers.length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {techMembers.map(renderMemberItem)}
+                    </div>
+                  </div>
+                )}
+
+                {generalMembers.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{
+                      fontSize: 11.5, fontWeight: 700, color: 'hsl(var(--muted-foreground))',
+                      display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em', textTransform: 'uppercase'
+                    }}>
+                      <Users size={12} /> General & Other Members ({generalMembers.length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {generalMembers.map(renderMemberItem)}
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
+              /* Flat List */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'visible' }}>
-                {members.map(member => {
-                  const isCurrent = !!(member.email && currentEmail && member.email.toLowerCase().trim() === currentEmail);
-                  const isMemberOwner = !!(board.createdBy && member.email && board.createdBy.toLowerCase().trim() === member.email.toLowerCase().trim());
-                  const memberRole: MemberRole = isMemberOwner ? 'owner' : (member.role || 'member');
-
-                  return (
-                    <motion.div
-                      key={member.id}
-                      layout
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '9px 12px',
-                        borderRadius: 12,
-                        backgroundColor: 'hsl(var(--card))',
-                        boxShadow: 'var(--neu-shadow-raised-sm)',
-                        gap: 10
-                      }}
-                    >
-                      {/* Avatar */}
-                      <div style={{ position: 'relative', flexShrink: 0 }}>
-                        {member.avatarUrl ? (
-                          <img
-                            src={member.avatarUrl}
-                            alt={member.name}
-                            style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid hsl(var(--border))' }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 34,
-                              height: 34,
-                              borderRadius: '50%',
-                              backgroundColor: member.color || 'hsl(var(--primary))',
-                              color: '#fff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 12,
-                              fontWeight: 700
-                            }}
-                          >
-                            {avatarInitials(member.name)}
-                          </div>
-                        )}
-                        {isCurrent && (
-                          <label
-                            title="Change photo"
-                            style={{
-                              position: 'absolute',
-                              bottom: -2,
-                              right: -2,
-                              width: 14,
-                              height: 14,
-                              borderRadius: '50%',
-                              backgroundColor: 'hsl(var(--primary))',
-                              color: '#fff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <Camera size={8} />
-                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleAvatarUpload(e, member.id)} />
-                          </label>
-                        )}
-                      </div>
-
-                      {/* Name & Email */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {member.name}
-                          </span>
-                          {isCurrent && (
-                            <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
-                              You
-                            </span>
-                          )}
-                        </div>
-                        {member.email && (
-                          <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {member.email}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Role Badge / Role Selector */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                        {isMemberOwner ? (
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              padding: '4px 10px',
-                              borderRadius: 9999,
-                              backgroundColor: 'hsl(var(--primary) / 0.12)',
-                              color: 'hsl(var(--primary))',
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              boxShadow: 'var(--neu-shadow-raised-sm)',
-                            }}
-                          >
-                            <Crown size={12} />
-                            <span>Owner</span>
-                          </div>
-                        ) : canManage ? (
-                          <NeumorphicSelect
-                            value={memberRole as AssignableRole}
-                            options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
-                            onChange={(newRole) => {
-                              updateMemberRole(board.id, member.id, newRole);
-                              showToast(`Updated ${member.name}'s role to ${newRole}`, 'success');
-                            }}
-                            size="sm"
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              padding: '3px 8px',
-                              borderRadius: 9999,
-                              backgroundColor: 'hsl(var(--card))',
-                              boxShadow: 'var(--neu-shadow-input)',
-                              fontSize: 11,
-                              fontWeight: 600,
-                              color: memberRole === 'admin' ? 'hsl(var(--primary))' : memberRole === 'observer' ? '#f59e0b' : 'hsl(var(--foreground))',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            {memberRole === 'admin' ? <Shield size={11} /> : memberRole === 'observer' ? <Eye size={11} /> : <User size={11} />}
-                            <span style={{ textTransform: 'capitalize' }}>{memberRole}</span>
-                          </div>
-                        )}
-
-                        {/* Delete Member Button */}
-                        {canManage && !isMemberOwner && (
-                          <motion.button
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => {
-                              showConfirm({
-                                title: `Remove ${member.name}?`,
-                                message: `Are you sure you want to remove ${member.name} from this board?`,
-                                confirmText: 'Remove Member',
-                                variant: 'danger',
-                                icon: 'trash',
-                                onConfirm: () => {
-                                  removeMember(member.id);
-                                  showToast(`Removed ${member.name}`, 'info');
-                                }
-                              });
-                            }}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              cursor: 'pointer',
-                              color: 'hsl(var(--destructive))',
-                              padding: 4,
-                              borderRadius: 6,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                            title="Remove from board"
-                          >
-                            <Trash2 size={14} />
-                          </motion.button>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                {members.map(renderMemberItem)}
               </div>
             )}
           </div>
+
+
 
           {/* Add Member Form (Owner & Admin Only) */}
           {canManage ? (

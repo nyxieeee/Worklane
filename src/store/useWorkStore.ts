@@ -25,7 +25,7 @@ interface WorkState {
   leaveBoard: (boardId: string, userEmail: string) => void;
   switchBoard: (boardId: string) => void;
   joinBoardFromCloud: (boardId: string, role: MemberRole, user: { name?: string; email: string; avatarUrl?: string }) => Promise<Board | null>;
-  syncCurrentUserProfile: (user: { name?: string; email?: string; avatarUrl?: string }) => void;
+  syncCurrentUserProfile: (user: { name?: string; email?: string; avatarUrl?: string; borderStyle?: string }) => void;
   removeUserFromAllBoards: (userEmail: string) => void;
 
   // Visibility selector
@@ -293,6 +293,7 @@ export const useWorkStore = create<WorkState>()(
                   ...m,
                   name: fullName,
                   avatarUrl: user.avatarUrl || m.avatarUrl,
+                  borderStyle: user.borderStyle !== undefined ? user.borderStyle : m.borderStyle,
                 };
               }
               return m;

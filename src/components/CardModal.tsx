@@ -4,7 +4,7 @@ import {
   Trash2, CheckSquare, Square, Download, X, Send, Plus, Check,
   Eye, Image as ImageIcon, Maximize2, AtSign, Reply, Sparkles,
   FileSpreadsheet, FileText, FileCode, FileArchive, File, Lock,
-  Edit3, Crown, Shield, Save, Loader2
+  Edit3, Crown, Shield, Save, Loader2, Globe, Server, Cpu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -12,10 +12,11 @@ import { useToastStore } from '../store/useToastStore';
 import { useConfirmStore } from '../store/useConfirmStore';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { LABELS, type Attachment, type Comment } from '../types';
-import { avatarInitials, formatBytes, formatTime, uid, truncateFileName, sortMembersWithOwnerFirst } from '../utils';
+import { LABELS, type Attachment, type Comment, type Member } from '../types';
+import { avatarInitials, formatBytes, formatTime, uid, truncateFileName, sortMembersWithOwnerFirst, getMemberTeamCategory, getTeamBadgeInfo } from '../utils';
 import { supabaseService } from '../services/supabaseService';
 import NeumorphicDatePicker from './ui/NeumorphicDatePicker';
+import AvatarBorder from './ui/AvatarBorder';
 
 interface Props {
   cardId: string | null;
@@ -128,6 +129,20 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const [localTitle, setLocalTitle] = useState(card.title);
   const [localDescription, setLocalDescription] = useState(card.description || '');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Assignee team filter state
+  const [assigneeTeamFilter, setAssigneeTeamFilter] = useState<'all' | 'frontend' | 'backend' | 'tech'>('all');
+
+  const feAssignees = useMemo(() => members.filter((m: Member) => getMemberTeamCategory(m.borderStyle) === 'frontend'), [members]);
+  const beAssignees = useMemo(() => members.filter((m: Member) => getMemberTeamCategory(m.borderStyle) === 'backend'), [members]);
+  const techAssignees = useMemo(() => members.filter((m: Member) => getMemberTeamCategory(m.borderStyle) === 'tech'), [members]);
+
+  const filteredAssigneeMembers = useMemo(() => {
+    if (assigneeTeamFilter === 'frontend') return feAssignees;
+    if (assigneeTeamFilter === 'backend') return beAssignees;
+    if (assigneeTeamFilter === 'tech') return techAssignees;
+    return members;
+  }, [assigneeTeamFilter, feAssignees, beAssignees, techAssignees, members]);
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
   const [shakeSave, setShakeSave] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1415,46 +1430,153 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
               {members.length === 0 ? (
                 <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>No members yet</span>
               ) : canAssign ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-                  {members.map(m => {
-                    const isCurrent = currentUser?.email && m.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-                    const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
-                    const isAssigned = card.assignees?.includes(m.id);
-                    const isMemberOwner = !!(board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim());
-
-                    return (
-                      <motion.button
-                        whileTap={{ scale: 0.97 }}
-                        key={m.id}
-                        className={`sidebar-nav-item ${isAssigned ? 'active' : ''}`}
-                        style={{ padding: '6px 8px', fontSize: 12 }}
-                        onClick={() => toggleCardAssignee(cardId, m.id)}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                  {/* Team filter buttons for quick frontend / backend assignment */}
+                  {(feAssignees.length > 0 || beAssignees.length > 0) && (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 2 }}>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          border: assigneeTeamFilter === 'all' ? '1px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
+                          backgroundColor: assigneeTeamFilter === 'all' ? 'hsl(var(--primary) / 0.12)' : 'hsl(var(--card))',
+                          color: assigneeTeamFilter === 'all' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
+                          display: 'flex', alignItems: 'center', gap: 4,
+                        }}
+                        onClick={() => setAssigneeTeamFilter('all')}
                       >
-                        {m.avatarUrl ? (
-                          <img src={m.avatarUrl} alt={displayName} style={{ width: 18, height: 18, borderRadius: '50%' }} />
-                        ) : (
-                          <div style={{ width: 18, height: 18, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {avatarInitials(displayName)}
-                          </div>
-                        )}
-                        <span style={{ flex: 1, textAlign: 'left' }}>{displayName}</span>
-                        {isMemberOwner ? (
-                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                            <Crown size={10} /> Owner
+                        <span>All ({members.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          border: assigneeTeamFilter === 'frontend' ? '1.5px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.3)',
+                          backgroundColor: assigneeTeamFilter === 'frontend' ? 'rgba(14, 165, 233, 0.15)' : 'hsl(var(--card))',
+                          color: '#0284c7',
+                          display: 'flex', alignItems: 'center', gap: 4,
+                        }}
+                        onClick={() => setAssigneeTeamFilter('frontend')}
+                      >
+                        <Globe size={11} />
+                        <span>Frontend ({feAssignees.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        style={{
+                          padding: '3px 8px',
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          border: assigneeTeamFilter === 'backend' ? '1.5px solid #ea580c' : '1px solid rgba(249, 115, 22, 0.3)',
+                          backgroundColor: assigneeTeamFilter === 'backend' ? 'rgba(249, 115, 22, 0.15)' : 'hsl(var(--card))',
+                          color: '#ea580c',
+                          display: 'flex', alignItems: 'center', gap: 4,
+                        }}
+                        onClick={() => setAssigneeTeamFilter('backend')}
+                      >
+                        <Server size={11} />
+                        <span>Backend ({beAssignees.length})</span>
+                      </button>
+
+                      {techAssignees.length > 0 && (
+                        <button
+                          type="button"
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: 10.5,
+                            fontWeight: 600,
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            border: assigneeTeamFilter === 'tech' ? '1.5px solid #7c3aed' : '1px solid rgba(124, 58, 237, 0.3)',
+                            backgroundColor: assigneeTeamFilter === 'tech' ? 'rgba(124, 58, 237, 0.15)' : 'hsl(var(--card))',
+                            color: '#7c3aed',
+                            display: 'flex', alignItems: 'center', gap: 4,
+                          }}
+                          onClick={() => setAssigneeTeamFilter('tech')}
+                        >
+                          <Cpu size={11} />
+                          <span>Other ({techAssignees.length})</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {filteredAssigneeMembers.length === 0 ? (
+                    <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', padding: '8px 4px' }}>
+                      No {assigneeTeamFilter} team members found.
+                    </div>
+                  ) : (
+                    filteredAssigneeMembers.map(m => {
+                      const isCurrent = currentUser?.email && m.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+                      const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
+                      const isAssigned = card.assignees?.includes(m.id);
+                      const isMemberOwner = !!(board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim());
+                      const badge = getTeamBadgeInfo(m.borderStyle);
+
+                      return (
+                        <motion.button
+                          whileTap={{ scale: 0.97 }}
+                          key={m.id}
+                          className={`sidebar-nav-item ${isAssigned ? 'active' : ''}`}
+                          style={{ padding: '6px 8px', fontSize: 12, gap: 8 }}
+                          onClick={() => toggleCardAssignee(cardId, m.id)}
+                        >
+                          <AvatarBorder borderStyle={m.borderStyle} size={20}>
+                            {m.avatarUrl ? (
+                              <img src={m.avatarUrl} alt={displayName} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {avatarInitials(displayName)}
+                              </div>
+                            )}
+                          </AvatarBorder>
+
+                          <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {displayName}
                           </span>
-                        ) : m.role === 'admin' ? (
-                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                            <Shield size={10} /> Admin
-                          </span>
-                        ) : m.role === 'observer' ? (
-                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                            <Eye size={10} /> Observer
-                          </span>
-                        ) : null}
-                        {isAssigned && <CheckSquare size={13} color="hsl(var(--primary))" />}
-                      </motion.button>
-                    );
-                  })}
+
+                          {/* Team Badge */}
+                          {badge && (
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+                              background: badge.bg, color: badge.color,
+                              display: 'inline-flex', alignItems: 'center', gap: 3
+                            }}>
+                              <span>{badge.icon}</span>
+                              <span>{badge.label}</span>
+                            </span>
+                          )}
+
+                          {isMemberOwner ? (
+                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <Crown size={10} /> Owner
+                            </span>
+                          ) : m.role === 'admin' ? (
+                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <Shield size={10} /> Admin
+                            </span>
+                          ) : m.role === 'observer' ? (
+                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <Eye size={10} /> Observer
+                            </span>
+                          ) : null}
+                          {isAssigned && <CheckSquare size={13} color="hsl(var(--primary))" />}
+                        </motion.button>
+                      );
+                    })
+                  )}
                 </div>
               ) : (
                 // Read-only assignee display for non-admins
@@ -1464,6 +1586,8 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                       const m = members.find(mem => mem.id === mId);
                       if (!m) return null;
                       const isMemOwner = !!(board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim());
+                      const badge = getTeamBadgeInfo(m.borderStyle);
+
                       return (
                         <div
                           key={m.id}
@@ -1478,14 +1602,26 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                             border: '1px solid hsl(var(--border) / 0.5)',
                           }}
                         >
-                          {m.avatarUrl ? (
-                            <img src={m.avatarUrl} alt={m.name} style={{ width: 20, height: 20, borderRadius: '50%' }} />
-                          ) : (
-                            <div style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              {avatarInitials(m.name)}
-                            </div>
-                          )}
+                          <AvatarBorder borderStyle={m.borderStyle} size={20}>
+                            {m.avatarUrl ? (
+                              <img src={m.avatarUrl} alt={m.name} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {avatarInitials(m.name)}
+                              </div>
+                            )}
+                          </AvatarBorder>
                           <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))', flex: 1 }}>{m.name}</span>
+                          {badge && (
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+                              background: badge.bg, color: badge.color,
+                              display: 'inline-flex', alignItems: 'center', gap: 3
+                            }}>
+                              <span>{badge.icon}</span>
+                              <span>{badge.label}</span>
+                            </span>
+                          )}
                           {isMemOwner ? (
                             <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                               <Crown size={10} /> Owner

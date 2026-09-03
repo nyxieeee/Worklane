@@ -8,6 +8,7 @@ export interface AuthUser {
   name: string;
   email: string;
   avatarUrl?: string;
+  borderStyle?: string;
   provider: 'google' | 'email';
 }
 
@@ -28,7 +29,7 @@ interface AuthState {
   accounts: RegisteredAccount[];
   
   initializeAuth: () => Promise<void>;
-  updateUserProfile: (updates: { name?: string; avatarUrl?: string }) => Promise<{ success: boolean; error?: string }>;
+  updateUserProfile: (updates: { name?: string; avatarUrl?: string; borderStyle?: string }) => Promise<{ success: boolean; error?: string }>;
   signUpWithEmail: (name: string, email: string, password: string) => Promise<{ success: boolean; requiresVerification?: boolean; error?: string }>;
   verifyEmailOtp: (email: string, token: string) => Promise<{ success: boolean; error?: string }>;
   resendVerificationOtp: (email: string) => Promise<{ success: boolean; error?: string }>;
@@ -82,12 +83,15 @@ export const useAuthStore = create<AuthState>()(
             const parsed = parseUser(session.user);
             // Fetch potential custom profile from Supabase profiles table
             try {
-              const { data: prof } = await supabase.from('profiles').select('avatar_url, name').eq('id', session.user.id).maybeSingle();
+              const { data: prof } = await supabase.from('profiles').select('avatar_url, name, border_style').eq('id', session.user.id).maybeSingle();
               if (prof?.avatar_url) {
                 parsed.avatarUrl = prof.avatar_url;
               }
               if (prof?.name) {
                 parsed.name = prof.name;
+              }
+              if (prof?.border_style) {
+                parsed.borderStyle = prof.border_style;
               }
             } catch {}
 
@@ -99,12 +103,15 @@ export const useAuthStore = create<AuthState>()(
             if (session?.user) {
               const parsed = parseUser(session.user);
               try {
-                const { data: prof } = await supabase.from('profiles').select('avatar_url, name').eq('id', session.user.id).maybeSingle();
+                const { data: prof } = await supabase.from('profiles').select('avatar_url, name, border_style').eq('id', session.user.id).maybeSingle();
                 if (prof?.avatar_url) {
                   parsed.avatarUrl = prof.avatar_url;
                 }
                 if (prof?.name) {
                   parsed.name = prof.name;
+                }
+                if (prof?.border_style) {
+                  parsed.borderStyle = prof.border_style;
                 }
               } catch {}
               set({ user: parsed, isAuthenticated: true });
@@ -118,17 +125,19 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      updateUserProfile: async (updates: { name?: string; avatarUrl?: string }) => {
+      updateUserProfile: async (updates: { name?: string; avatarUrl?: string; borderStyle?: string }) => {
         const { user, accounts } = get();
         if (!user) return { success: false, error: 'Not authenticated' };
 
         const newName = updates.name !== undefined ? updates.name.trim() : user.name;
         const newAvatar = updates.avatarUrl !== undefined ? updates.avatarUrl : user.avatarUrl;
+        const newBorder = updates.borderStyle !== undefined ? updates.borderStyle : user.borderStyle;
 
         const updatedUser: AuthUser = {
           ...user,
           name: newName || 'User',
           avatarUrl: newAvatar || undefined,
+          borderStyle: newBorder,
         };
 
         set({ user: updatedUser });
@@ -151,6 +160,7 @@ export const useAuthStore = create<AuthState>()(
                 custom_avatar_url: newAvatar || '',
                 avatar_url: newAvatar || '',
                 picture: newAvatar || '',
+                border_style: newBorder || 'none',
               },
             });
           } catch (err: any) {

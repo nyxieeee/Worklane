@@ -5,6 +5,7 @@ import { useWorkStore } from '../store/useWorkStore';
 import { useNotifStore } from '../store/useNotifStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { avatarInitials, sortMembersWithOwnerFirst } from '../utils';
+import AvatarBorder from './ui/AvatarBorder';
 import type { Member } from '../types';
 
 interface Props {
@@ -233,24 +234,22 @@ export default function Topbar({
             style={{ cursor: 'pointer', paddingRight: 4 }}
           >
             {shown.map(m => (
-              m.avatarUrl ? (
-                <img
-                  key={m.id}
-                  src={m.avatarUrl}
-                  alt={m.name}
-                  className="card-avatar"
-                  title={m.name}
-                />
-              ) : (
-                <div
-                  key={m.id}
-                  className="card-avatar"
-                  style={{ backgroundColor: m.color }}
-                  title={m.name}
-                >
-                  {avatarInitials(m.name)}
-                </div>
-              )
+              <AvatarBorder key={m.id} borderStyle={m.borderStyle} size={26} title={m.name}>
+                {m.avatarUrl ? (
+                  <img
+                    src={m.avatarUrl}
+                    alt={m.name}
+                    style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div
+                    className="card-avatar"
+                    style={{ backgroundColor: m.color, width: 26, height: 26, fontSize: 10 }}
+                  >
+                    {avatarInitials(m.name)}
+                  </div>
+                )}
+              </AvatarBorder>
             ))}
             {extra > 0 && (
               <div className="card-avatar" style={{ backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
@@ -322,12 +321,12 @@ export default function Topbar({
               flexShrink: 0,
               aspectRatio: '1 / 1',
               borderRadius: '50%',
-              backgroundColor: 'hsl(var(--primary))',
+              backgroundColor: 'transparent',
               color: 'hsl(var(--primary-foreground))',
               fontSize: 11,
               fontWeight: 700,
               padding: 0,
-              overflow: 'hidden',
+              overflow: 'visible',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -335,15 +334,25 @@ export default function Topbar({
             onClick={() => setUserDropOpen(o => !o)}
             title="User Profile"
           >
-            {user?.avatarUrl ? (
-              <img
-                src={user.avatarUrl}
-                alt={user?.name || 'User'}
-                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', display: 'block', aspectRatio: '1 / 1' }}
-              />
-            ) : (
-              avatarInitials(user?.name || 'U')
-            )}
+            <AvatarBorder borderStyle={user?.borderStyle} size={32}>
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user?.name || 'User'}
+                  style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  backgroundColor: 'hsl(var(--primary))',
+                  color: 'hsl(var(--primary-foreground))',
+                  fontSize: 11, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {avatarInitials(user?.name || 'U')}
+                </div>
+              )}
+            </AvatarBorder>
           </motion.button>
 
           <AnimatePresence>

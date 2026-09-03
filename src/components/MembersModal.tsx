@@ -538,18 +538,6 @@ export default function MembersModal({ onClose }: Props) {
                     );
                   }}
                 />
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 6, borderTop: '1px solid hsl(var(--border) / 0.4)' }}>
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ fontSize: 11.5, padding: '5px 16px' }}
-                    onClick={() => setBorderPickerMemberId(null)}
-                  >
-                    Done
-                  </motion.button>
-                </div>
               </div>
             </motion.div>
           )}

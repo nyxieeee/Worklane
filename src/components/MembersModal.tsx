@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X, UserPlus, Camera, Trash2, LogOut, Shield, User, Eye,
   Crown, Info, Lock, Search, Link2, Copy, Check, Sparkles,
-  UserCheck, Loader2, Mail, Palette, Globe, Server, Cpu, Users, Layers
+  UserCheck, Loader2, Mail, Palette, Globe, Server, Cpu, Users, Layers, Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
@@ -73,6 +73,7 @@ export default function MembersModal({ onClose }: Props) {
   // Team Filtering & Grouping
   const [teamFilter, setTeamFilter] = useState<'all' | 'frontend' | 'backend' | 'tech' | 'general'>('all');
   const [groupByTeam, setGroupByTeam] = useState<boolean>(true);
+  const [addTeamRole, setAddTeamRole] = useState<'none' | 'frontend' | 'backend'>('none');
 
   const searchTimeoutRef = useRef<number | undefined>(undefined);
 
@@ -157,7 +158,7 @@ export default function MembersModal({ onClose }: Props) {
 
     setIsAdding(true);
     try {
-      const result = await addMember(selectedUser.name, cleanEmail, selectedUser.avatarUrl, role, selectedUser.id);
+      const result = await addMember(selectedUser.name, cleanEmail, selectedUser.avatarUrl, role, selectedUser.id, addTeamRole);
       if (result !== null) {
         const adderName = currentUser?.name || currentUser?.email || 'A board manager';
         
@@ -303,28 +304,72 @@ export default function MembersModal({ onClose }: Props) {
                 </span>
               )}
               {badge ? (
-                <span style={{
-                  fontSize: 9.5, fontWeight: 700, padding: '1.5px 7px', borderRadius: 9999,
-                  background: badge.bg,
-                  color: badge.color,
-                  display: 'inline-flex', alignItems: 'center', gap: 3.5,
-                  boxShadow: 'var(--neu-shadow-raised-sm)'
-                }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isOwner || isCurrent) {
+                      setBorderPickerMemberId(borderPickerMemberId === member.id ? null : member.id);
+                      setPendingBorderStyle(member.borderStyle || 'none');
+                    }
+                  }}
+                  style={{
+                    fontSize: 9.5, fontWeight: 700, padding: '1.5px 7px', borderRadius: 9999,
+                    background: badge.bg,
+                    color: badge.color,
+                    border: `1px solid ${badge.color}40`,
+                    display: 'inline-flex', alignItems: 'center', gap: 3.5,
+                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                    cursor: (isOwner || isCurrent) ? 'pointer' : 'default'
+                  }}
+                  title={(isOwner || isCurrent) ? 'Click to change team role' : undefined}
+                >
                   <span>{badge.icon}</span>
                   <span>{badge.label}</span>
-                </span>
+                  {(isOwner || isCurrent) && <span style={{ fontSize: 8, opacity: 0.7 }}>▾</span>}
+                </button>
               ) : member.borderStyle && member.borderStyle !== 'none' ? (() => {
                 const bp = BORDER_PRESETS.find(p => p.key === member.borderStyle);
                 return bp ? (
-                  <span style={{
-                    fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 9999,
-                    background: 'hsl(var(--muted))',
-                    color: 'hsl(var(--muted-foreground))',
-                  }}>
-                    {bp.label}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isOwner || isCurrent) {
+                        setBorderPickerMemberId(borderPickerMemberId === member.id ? null : member.id);
+                        setPendingBorderStyle(member.borderStyle || 'none');
+                      }
+                    }}
+                    style={{
+                      fontSize: 9.5, fontWeight: 700, padding: '1.5px 6px', borderRadius: 9999,
+                      background: 'hsl(var(--muted))',
+                      color: 'hsl(var(--muted-foreground))',
+                      border: '1px solid hsl(var(--border))',
+                      cursor: (isOwner || isCurrent) ? 'pointer' : 'default',
+                      display: 'inline-flex', alignItems: 'center', gap: 3
+                    }}
+                  >
+                    <span>{bp.label}</span>
+                    {(isOwner || isCurrent) && <span style={{ fontSize: 8, opacity: 0.7 }}>▾</span>}
+                  </button>
                 ) : null;
-              })() : null}
+              })() : (isOwner || isCurrent) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBorderPickerMemberId(borderPickerMemberId === member.id ? null : member.id);
+                    setPendingBorderStyle(member.borderStyle || 'none');
+                  }}
+                  style={{
+                    fontSize: 9.5, fontWeight: 600, padding: '1px 6px', borderRadius: 6,
+                    background: 'hsl(var(--muted) / 0.5)', color: 'hsl(var(--muted-foreground))',
+                    border: '1px dashed hsl(var(--border))', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 3
+                  }}
+                  title="Assign team role (Frontend, Backend, etc.)"
+                >
+                  <Plus size={9} />
+                  <span>Assign Role</span>
+                </button>
+              ) : null}
             </div>
             {member.email && (
               <div style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -334,7 +379,7 @@ export default function MembersModal({ onClose }: Props) {
           </div>
 
           {/* Role Badge / Role Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             {isMemberOwner ? (
               <div
                 style={{
@@ -383,7 +428,57 @@ export default function MembersModal({ onClose }: Props) {
               </div>
             )}
 
-            {/* Border Style / Role button — owner can assign, member can see their own */}
+            {/* Quick 1-Click Role Assignment (Owner or Current User) */}
+            {(isOwner || isCurrent) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                <button
+                  type="button"
+                  title={`Set ${isCurrent ? 'your role' : member.name} as Frontend Dev`}
+                  style={{
+                    padding: '3px 7px', fontSize: 10, fontWeight: 700, borderRadius: 6,
+                    border: member.borderStyle === 'frontend' ? '1.5px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.35)',
+                    backgroundColor: member.borderStyle === 'frontend' ? '#0284c7' : 'rgba(14, 165, 233, 0.08)',
+                    color: member.borderStyle === 'frontend' ? '#fff' : '#0284c7',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onClick={() => {
+                    const newStyle = member.borderStyle === 'frontend' ? 'none' : 'frontend';
+                    updateMember(member.id, { borderStyle: newStyle });
+                    if (isCurrent) {
+                      useAuthStore.getState().updateUserProfile({ borderStyle: newStyle });
+                    }
+                    showToast(newStyle === 'frontend' ? `Assigned to Frontend Team` : `Removed from Frontend Team`, 'success');
+                  }}
+                >
+                  FE
+                </button>
+                <button
+                  type="button"
+                  title={`Set ${isCurrent ? 'your role' : member.name} as Backend Dev`}
+                  style={{
+                    padding: '3px 7px', fontSize: 10, fontWeight: 700, borderRadius: 6,
+                    border: member.borderStyle === 'backend' ? '1.5px solid #ea580c' : '1px solid rgba(249, 115, 22, 0.35)',
+                    backgroundColor: member.borderStyle === 'backend' ? '#ea580c' : 'rgba(249, 115, 22, 0.08)',
+                    color: member.borderStyle === 'backend' ? '#fff' : '#ea580c',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onClick={() => {
+                    const newStyle = member.borderStyle === 'backend' ? 'none' : 'backend';
+                    updateMember(member.id, { borderStyle: newStyle });
+                    if (isCurrent) {
+                      useAuthStore.getState().updateUserProfile({ borderStyle: newStyle });
+                    }
+                    showToast(newStyle === 'backend' ? `Assigned to Backend Team` : `Removed from Backend Team`, 'success');
+                  }}
+                >
+                  BE
+                </button>
+              </div>
+            )}
+
+            {/* Border Style / Palette button — owner can assign, member can see their own */}
             {(isOwner || isCurrent) && (
               <motion.button
                 whileTap={{ scale: 0.9 }}
@@ -407,7 +502,7 @@ export default function MembersModal({ onClose }: Props) {
                   justifyContent: 'center',
                   transition: 'all 0.12s',
                 }}
-                title={isOwner && !isCurrent ? `Set team role & border for ${member.name}` : 'Change your team role & border'}
+                title={isOwner && !isCurrent ? `More roles & borders for ${member.name}` : 'Change your team role & border'}
               >
                 <Palette size={13} />
               </motion.button>
@@ -449,7 +544,7 @@ export default function MembersModal({ onClose }: Props) {
           </div>
         </motion.div>
 
-        {/* Inline Border Picker Panel (expandable) */}
+        {/* Inline Border Picker Panel (expandable with INSTANT AUTO-SAVE) */}
         <AnimatePresence>
           {borderPickerMemberId === member.id && (
             <motion.div
@@ -464,51 +559,70 @@ export default function MembersModal({ onClose }: Props) {
                 borderRadius: 12,
                 backgroundColor: 'hsl(var(--background))',
                 boxShadow: 'var(--neu-shadow-input)',
-                border: '1px solid hsl(var(--primary) / 0.2)',
+                border: '1px solid hsl(var(--primary) / 0.25)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 12,
               }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Palette size={13} color="hsl(var(--primary))" />
-                  {isOwner && !isCurrent ? `Set Team / Border Role for ${member.name}` : 'Your Team / Border Style'}
-                </div>
-                <ProfileBorderPicker
-                  name={member.name}
-                  avatarUrl={member.avatarUrl}
-                  color={member.color}
-                  value={pendingBorderStyle}
-                  onChange={setPendingBorderStyle}
-                />
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ fontSize: 12, padding: '6px 14px' }}
-                    onClick={() => setBorderPickerMemberId(null)}
-                  >
-                    Cancel
-                  </motion.button>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Palette size={13} color="hsl(var(--primary))" />
+                      <span>{isOwner && !isCurrent ? `Set Team / Border Role for ${member.name}` : 'Your Team / Border Style'}</span>
+                    </div>
+                    <span style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))' }}>
+                      Click any style below to instantly save and apply.
+                    </span>
+                  </div>
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     type="button"
                     className="btn btn-primary"
-                    style={{ fontSize: 12, padding: '6px 16px' }}
-                    onClick={() => {
-                      updateMember(member.id, { borderStyle: pendingBorderStyle });
-                      setBorderPickerMemberId(null);
-                      const label = BORDER_PRESETS.find(p => p.key === pendingBorderStyle)?.label || pendingBorderStyle;
-                      showToast(`Set team role & border to "${label}" for ${member.name}`, 'success');
-                    }}
+                    style={{ fontSize: 11, padding: '4px 12px' }}
+                    onClick={() => setBorderPickerMemberId(null)}
                   >
-                    Apply Team Role
+                    Done
+                  </motion.button>
+                </div>
+
+                <ProfileBorderPicker
+                  name={member.name}
+                  avatarUrl={member.avatarUrl}
+                  color={member.color}
+                  value={member.borderStyle || 'none'}
+                  onChange={(newStyle) => {
+                    setPendingBorderStyle(newStyle);
+                    updateMember(member.id, { borderStyle: newStyle });
+                    if (isCurrent) {
+                      useAuthStore.getState().updateUserProfile({ borderStyle: newStyle });
+                    }
+                    const preset = BORDER_PRESETS.find(p => p.key === newStyle);
+                    const label = preset?.label || newStyle;
+                    showToast(
+                      newStyle === 'none'
+                        ? `Removed profile border for ${member.name}`
+                        : `Applied "${label}" to ${member.name}`,
+                      'success'
+                    );
+                  }}
+                />
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 6, borderTop: '1px solid hsl(var(--border) / 0.4)' }}>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: 11.5, padding: '5px 16px' }}
+                    onClick={() => setBorderPickerMemberId(null)}
+                  >
+                    Done
                   </motion.button>
                 </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+
       </React.Fragment>
     );
   };
@@ -693,8 +807,17 @@ export default function MembersModal({ onClose }: Props) {
                   <Globe size={24} style={{ color: '#0284c7' }} />
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Frontend Members Yet</div>
                   <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
-                    Switch to "All", then click the 🎨 palette button on any member to set their role & border to <strong>Frontend Dev</strong>.
+                    Switch to "All", then click the <strong>FE</strong> button or 🎨 palette on any member to set their role to <strong>Frontend Dev</strong>.
                   </div>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: 11.5, padding: '5px 14px', marginTop: 4 }}
+                    onClick={() => setTeamFilter('all')}
+                  >
+                    View All Members ({members.length})
+                  </motion.button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -711,8 +834,17 @@ export default function MembersModal({ onClose }: Props) {
                   <Server size={24} style={{ color: '#ea580c' }} />
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>No Backend Members Yet</div>
                   <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', maxWidth: 360 }}>
-                    Switch to "All", then click the 🎨 palette button on any member to set their role & border to <strong>Backend Dev</strong>.
+                    Switch to "All", then click the <strong>BE</strong> button or 🎨 palette on any member to set their role to <strong>Backend Dev</strong>.
                   </div>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ fontSize: 11.5, padding: '5px 14px', marginTop: 4 }}
+                    onClick={() => setTeamFilter('all')}
+                  >
+                    View All Members ({members.length})
+                  </motion.button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1088,34 +1220,83 @@ export default function MembersModal({ onClose }: Props) {
                     </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 10, alignItems: 'center' }}>
-                    <div>
-                      <label className="field-label" style={{ fontSize: 11, marginBottom: 4 }}>Assign Role</label>
-                      <NeumorphicSelect
-                        value={role}
-                        options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
-                        onChange={setRole}
-                        size="md"
-                      />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 10, alignItems: 'center' }}>
+                      <div>
+                        <label className="field-label" style={{ fontSize: 11, marginBottom: 4 }}>Board Permission</label>
+                        <NeumorphicSelect
+                          value={role}
+                          options={isOwner ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS}
+                          onChange={setRole}
+                          size="md"
+                        />
+                      </div>
+                      <div style={{ alignSelf: 'flex-end' }}>
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          className="btn btn-primary"
+                          onClick={handleAddSelected}
+                          disabled={isAdding}
+                          style={{ width: '100%', height: 38, justifyContent: 'center', opacity: isAdding ? 0.75 : 1 }}
+                        >
+                          {isAdding ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" /> Adding...
+                            </>
+                          ) : (
+                            <>
+                              <UserPlus size={14} /> Add to Team
+                            </>
+                          )}
+                        </motion.button>
+                      </div>
                     </div>
-                    <div style={{ alignSelf: 'flex-end' }}>
-                      <motion.button
-                        whileTap={{ scale: 0.95 }}
-                        className="btn btn-primary"
-                        onClick={handleAddSelected}
-                        disabled={isAdding}
-                        style={{ width: '100%', height: 38, justifyContent: 'center', opacity: isAdding ? 0.75 : 1 }}
-                      >
-                        {isAdding ? (
-                          <>
-                            <Loader2 size={14} className="animate-spin" /> Adding...
-                          </>
-                        ) : (
-                          <>
-                            <UserPlus size={14} /> Add to Team
-                          </>
-                        )}
-                      </motion.button>
+
+                    <div>
+                      <label className="field-label" style={{ fontSize: 11, marginBottom: 4 }}>Team Role / Specialization</label>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          type="button"
+                          style={{
+                            flex: 1, padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                            border: addTeamRole === 'none' ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
+                            backgroundColor: addTeamRole === 'none' ? 'hsl(var(--primary) / 0.12)' : 'hsl(var(--card))',
+                            color: addTeamRole === 'none' ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onClick={() => setAddTeamRole('none')}
+                        >
+                          General
+                        </button>
+                        <button
+                          type="button"
+                          style={{
+                            flex: 1, padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                            border: addTeamRole === 'frontend' ? '1.5px solid #0284c7' : '1px solid rgba(14, 165, 233, 0.35)',
+                            backgroundColor: addTeamRole === 'frontend' ? 'rgba(14, 165, 233, 0.15)' : 'hsl(var(--card))',
+                            color: '#0284c7',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                            transition: 'all 0.15s ease'
+                          }}
+                          onClick={() => setAddTeamRole('frontend')}
+                        >
+                          <Globe size={12} /> Frontend Dev
+                        </button>
+                        <button
+                          type="button"
+                          style={{
+                            flex: 1, padding: '6px 8px', fontSize: 11, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                            border: addTeamRole === 'backend' ? '1.5px solid #ea580c' : '1px solid rgba(249, 115, 22, 0.35)',
+                            backgroundColor: addTeamRole === 'backend' ? 'rgba(249, 115, 22, 0.15)' : 'hsl(var(--card))',
+                            color: '#ea580c',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                            transition: 'all 0.15s ease'
+                          }}
+                          onClick={() => setAddTeamRole('backend')}
+                        >
+                          <Server size={12} /> Backend Dev
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </motion.div>

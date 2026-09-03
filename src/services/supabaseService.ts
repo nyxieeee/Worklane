@@ -155,7 +155,9 @@ export const supabaseService = {
                 color: m.color || '#6366f1',
                 avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
                 role: (m.role as MemberRole) || 'member',
-                borderStyle: realProfile?.border_style || m.border_style || undefined,
+                borderStyle: (m.border_style && m.border_style !== 'none')
+                  ? m.border_style
+                  : (realProfile?.border_style && realProfile.border_style !== 'none' ? realProfile.border_style : (m.border_style || 'none')),
               };
             }),
           b.created_by
@@ -289,6 +291,7 @@ export const supabaseService = {
           color: m.color,
           avatar_url: m.avatarUrl || null,
           role: m.role || 'member',
+          border_style: m.borderStyle || 'none',
         }));
         const { error: mErr } = await supabase.from('board_members').upsert(memberRows, { onConflict: 'board_id,email' });
         if (mErr) console.warn('[SupabaseService] Member upsert warning:', mErr);
@@ -492,7 +495,7 @@ export const supabaseService = {
       // Look up if user already has a real avatar or registered user_id in profiles
       const { data: prof } = await supabase
         .from('profiles')
-        .select('id, avatar_url, name')
+        .select('id, avatar_url, name, border_style')
         .ilike('email', cleanEmail)
         .maybeSingle();
       const finalAvatar = prof?.avatar_url || member.avatarUrl || null;
@@ -517,6 +520,7 @@ export const supabaseService = {
           color: member.color || '#6366f1',
           avatar_url: finalAvatar,
           role: member.role || 'member',
+          border_style: member.borderStyle || prof?.border_style || 'none',
         };
         if (finalUserId) updatePayload.user_id = finalUserId;
         await supabase
@@ -533,6 +537,7 @@ export const supabaseService = {
           color: member.color || '#6366f1',
           avatar_url: finalAvatar,
           role: member.role || 'member',
+          border_style: member.borderStyle || prof?.border_style || 'none',
         };
         if (finalUserId) insertPayload.user_id = finalUserId;
 
@@ -648,7 +653,7 @@ export const supabaseService = {
         supabase.from('board_members').select('*').eq('board_id', boardId),
         supabase.from('columns').select('*').eq('board_id', boardId).order('position'),
         supabase.from('cards').select('*').eq('board_id', boardId).order('position'),
-        supabase.from('profiles').select('email, name, avatar_url'),
+        supabase.from('profiles').select('email, name, avatar_url, border_style'),
       ]);
 
       const allMembers = membersRes.data || [];
@@ -657,7 +662,7 @@ export const supabaseService = {
       const allProfiles = profilesRes.data || [];
       const cardIds = allCards.map(c => c.id);
 
-      const profileMap = new Map<string, { name?: string; avatar_url?: string }>();
+      const profileMap = new Map<string, { name?: string; avatar_url?: string; border_style?: string }>();
       allProfiles.forEach(p => {
         if (p.email) profileMap.set(p.email.toLowerCase().trim(), p);
       });
@@ -692,6 +697,9 @@ export const supabaseService = {
             color: m.color || '#6366f1',
             avatarUrl: realProfile?.avatar_url || m.avatar_url || undefined,
             role: (m.role as MemberRole) || 'member',
+            borderStyle: (m.border_style && m.border_style !== 'none')
+              ? m.border_style
+              : (realProfile?.border_style && realProfile.border_style !== 'none' ? realProfile.border_style : (m.border_style || 'none')),
           };
         }),
         b.created_by
@@ -891,17 +899,20 @@ export const supabaseService = {
   },
 
   /**
-   * Update member role in Supabase
+   * Update member role in Supabase (matches by email if available, otherwise by id)
    */
-  async updateMemberRole(boardId: string, memberId: string, role: MemberRole): Promise<boolean> {
-    if (!isSupabaseConfigured() || !boardId || !memberId) return false;
+  async updateMemberRole(boardId: string, memberId: string, role: MemberRole, email?: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !boardId) return false;
     try {
-      const { error } = await supabase
-        .from('board_members')
-        .update({ role })
-        .eq('board_id', boardId)
-        .or(`id.eq.${memberId},email.eq.${memberId}`);
-      if (error) throw error;
+      const cleanEmail = email ? email.toLowerCase().trim() : '';
+      if (cleanEmail) {
+        const { error } = await supabase.from('board_members').update({ role }).eq('board_id', boardId).ilike('email', cleanEmail);
+        if (error && memberId) {
+          await supabase.from('board_members').update({ role }).eq('board_id', boardId).eq('id', memberId);
+        }
+      } else if (memberId) {
+        await supabase.from('board_members').update({ role }).eq('board_id', boardId).eq('id', memberId);
+      }
 
       try {
         await supabase.from('boards').update({ updated_at: new Date().toISOString() }).eq('id', boardId);
@@ -911,6 +922,40 @@ export const supabaseService = {
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error updating member role:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Update member border style / team role in Supabase (updates both board_members and profiles)
+   */
+  async updateMemberBorderStyle(boardId: string, memberId: string, borderStyle: string, email?: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !boardId) return false;
+    try {
+      const cleanEmail = email ? email.toLowerCase().trim() : '';
+      const styleVal = borderStyle || 'none';
+
+      if (cleanEmail) {
+        const { error } = await supabase.from('board_members').update({ border_style: styleVal }).eq('board_id', boardId).ilike('email', cleanEmail);
+        if (error && memberId) {
+          await supabase.from('board_members').update({ border_style: styleVal }).eq('board_id', boardId).eq('id', memberId);
+        }
+        // Also update profiles table so the user's registered profile keeps their style
+        try {
+          await supabase.from('profiles').update({ border_style: styleVal }).ilike('email', cleanEmail);
+        } catch {}
+      } else if (memberId) {
+        await supabase.from('board_members').update({ border_style: styleVal }).eq('board_id', boardId).eq('id', memberId);
+      }
+
+      try {
+        await supabase.from('boards').update({ updated_at: new Date().toISOString() }).eq('id', boardId);
+      } catch {}
+
+      await this.broadcastUpdate('boards', { boardId });
+      return true;
+    } catch (err) {
+      console.warn('[SupabaseService] Error updating member border style:', err);
       return false;
     }
   },

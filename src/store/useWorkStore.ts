@@ -61,7 +61,7 @@ interface WorkState {
   deleteComment: (cardId: string, commentId: string) => void;
 
   // Member actions
-  addMember: (name: string, email: string, avatarUrl?: string, role?: MemberRole, userId?: string) => Promise<string | null>;
+  addMember: (name: string, email: string, avatarUrl?: string, role?: MemberRole, userId?: string, borderStyle?: string) => Promise<string | null>;
   updateMember: (memberId: string, patch: Partial<Member>) => void;
   updateMemberRole: (boardId: string, memberId: string, role: MemberRole) => void;
   removeMember: (memberId: string) => void;
@@ -1042,7 +1042,7 @@ export const useWorkStore = create<WorkState>()(
       },
 
       // ── Member actions ────────────────────────────────
-      addMember: async (name, email, avatarUrl, role = 'member', userId?: string) => {
+      addMember: async (name, email, avatarUrl, role = 'member', userId?: string, borderStyle = 'none') => {
         let newId: string | null = null;
         let newMember: Member | null = null;
         const currentActiveId = get().activeBoardId;
@@ -1061,7 +1061,7 @@ export const useWorkStore = create<WorkState>()(
           }
           const color = AVATAR_COLORS[currentBoard.members.length % AVATAR_COLORS.length];
           newId = uid();
-          newMember = { id: newId!, name: name.trim(), email: cleanEmail, color, avatarUrl, role };
+          newMember = { id: newId!, name: name.trim(), email: cleanEmail, color, avatarUrl, role, borderStyle };
 
           const updatedBoards = s.boards.map(b => {
             if (b.id !== currentActiveId) return b;
@@ -1082,31 +1082,50 @@ export const useWorkStore = create<WorkState>()(
 
       updateMember: (memberId, patch) => {
         let targetBoard: Board | undefined;
+        let updatedMember: Member | undefined;
         set(s => {
           if (!s.activeBoardId) return s;
           const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => ({
             ...b,
-            members: b.members.map(m => m.id === memberId ? { ...m, ...patch } : m),
+            members: b.members.map(m => {
+              if (m.id === memberId) {
+                updatedMember = { ...m, ...patch };
+                return updatedMember;
+              }
+              return m;
+            }),
           }));
           targetBoard = updatedBoards.find(b => b.id === s.activeBoardId);
           return { boards: updatedBoards };
         });
-        if (targetBoard) scheduleBoardSync(targetBoard, 50);
+        if (targetBoard) {
+          scheduleBoardSync(targetBoard, 50);
+          if (updatedMember?.borderStyle !== undefined) {
+            supabaseService.updateMemberBorderStyle(targetBoard.id, memberId, updatedMember.borderStyle, updatedMember.email);
+          }
+        }
       },
 
       updateMemberRole: (boardId, memberId, role) => {
         let targetBoard: Board | undefined;
+        let updatedMember: Member | undefined;
         set(s => {
           const updatedBoards = updateBoards(s.boards, boardId, b => ({
             ...b,
-            members: b.members.map(m => m.id === memberId ? { ...m, role } : m),
+            members: b.members.map(m => {
+              if (m.id === memberId) {
+                updatedMember = { ...m, role };
+                return updatedMember;
+              }
+              return m;
+            }),
           }));
           targetBoard = updatedBoards.find(b => b.id === boardId);
           return { boards: updatedBoards };
         });
         if (targetBoard) {
           scheduleBoardSync(targetBoard, 50);
-          supabaseService.updateMemberRole(boardId, memberId, role);
+          supabaseService.updateMemberRole(boardId, memberId, role, updatedMember?.email);
         }
       },
 

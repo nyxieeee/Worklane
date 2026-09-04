@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import sidebarDark from "../assets/sidebar-dark.png";
 import sidebarLight from "../assets/sidebar.png";

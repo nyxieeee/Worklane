@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import {
   X, Sun, Moon, Bell, Shield, Sliders, Mail, Tag, Plus, Trash2, Check,
   AlertTriangle, Upload, Download, RefreshCw, Send, CheckCircle2, User, Camera, Image, Sparkles,
-  Globe, AlertCircle, Loader2
+  Globe, AlertCircle, Loader2, Crop
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useThemeStore } from '../../store/useThemeStore';
@@ -15,6 +15,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { useConfirmStore } from '../../store/useConfirmStore';
 import { avatarInitials } from '../../utils';
 import ProfileBorderPicker from '../ui/ProfileBorderPicker';
+import AvatarCropperModal from './AvatarCropperModal';
 
 type TabKey = 'profile' | 'appearance' | 'notifications' | 'email' | 'privacy' | 'labels';
 
@@ -67,6 +68,8 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
   const [customAvatarUrl, setCustomAvatarUrl] = useState(user?.avatarUrl || '');
   const [borderStyle, setBorderStyle] = useState(user?.borderStyle || 'none');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [cropperOpen, setCropperOpen] = useState(false);
+  const [cropperImageSrc, setCropperImageSrc] = useState<string>('');
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   // Local state for adding custom label
@@ -93,13 +96,14 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
   ]).size;
   const storageKB = (storageBytes / 1024).toFixed(1);
 
-  // 1. Handle Profile Avatar File Upload
+  // 1. Handle Profile Avatar File Upload & Open Cropper
   const handleAvatarFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 3 * 1024 * 1024) {
-      showToast('Image file size must be less than 3MB', 'warning');
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image file size must be less than 5MB', 'warning');
+      e.target.value = '';
       return;
     }
 
@@ -107,11 +111,18 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
     reader.onload = (uploadEvent) => {
       const result = uploadEvent.target?.result as string;
       if (result) {
-        setCustomAvatarUrl(result);
-        showToast('Photo loaded! Click "Save Profile Changes" to apply.', 'info');
+        setCropperImageSrc(result);
+        setCropperOpen(true);
       }
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleCropperApply = (croppedDataUrl: string) => {
+    setCustomAvatarUrl(croppedDataUrl);
+    setCropperOpen(false);
+    showToast('Photo cropped & adjusted! Click "Save Profile Changes" to apply.', 'info');
   };
 
   // 2. Handle Save Profile Changes
@@ -424,6 +435,23 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
                         <Upload size={13} />
                         <span>Upload Image File</span>
                       </motion.button>
+
+                      {customAvatarUrl && (
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ fontSize: 12, padding: '6px 12px', gap: 5 }}
+                          onClick={() => {
+                            setCropperImageSrc(customAvatarUrl);
+                            setCropperOpen(true);
+                          }}
+                          title="Drag, zoom, or adjust photo framing"
+                        >
+                          <Crop size={13} />
+                          <span>Adjust & Zoom</span>
+                        </motion.button>
+                      )}
 
                       {customAvatarUrl && (
                         <motion.button
@@ -1002,6 +1030,14 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
           </div>
         </div>
       </motion.div>
+
+      {/* Profile Photo Cropper & Drag/Zoom Modal */}
+      <AvatarCropperModal
+        isOpen={cropperOpen}
+        imageSrc={cropperImageSrc}
+        onClose={() => setCropperOpen(false)}
+        onApply={handleCropperApply}
+      />
     </div>
   );
 }

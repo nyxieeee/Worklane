@@ -17,6 +17,7 @@ import AvatarBorder from './ui/AvatarBorder';
 import ProfileBorderPicker from './ui/ProfileBorderPicker';
 import { Member, MemberRole, BORDER_PRESETS } from '../types';
 import { supabaseService } from '../services/supabaseService';
+import AvatarCropperModal from './modals/AvatarCropperModal';
 
 interface Props {
   onClose: () => void;
@@ -124,24 +125,38 @@ export default function MembersModal({ onClose }: Props) {
     };
   }, [searchQuery]);
 
+  const [cropperOpen, setCropperOpen] = useState(false);
+  const [cropperImageSrc, setCropperImageSrc] = useState('');
+  const [croppingMemberId, setCroppingMemberId] = useState<string | null>(null);
+
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>, memberId?: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('Avatar image must be under 2 MB', 'error');
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Avatar image must be under 5 MB', 'error');
       e.target.value = '';
       return;
     }
     const reader = new FileReader();
     reader.onload = ev => {
       const dataUrl = (ev.target?.result as string) ?? '';
-      if (memberId) {
-        updateMember(memberId, { avatarUrl: dataUrl });
-        showToast('Profile photo updated', 'success');
+      if (dataUrl && memberId) {
+        setCropperImageSrc(dataUrl);
+        setCroppingMemberId(memberId);
+        setCropperOpen(true);
       }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  const handleCropperApply = (croppedDataUrl: string) => {
+    if (croppingMemberId) {
+      updateMember(croppingMemberId, { avatarUrl: croppedDataUrl });
+      showToast('Profile photo updated', 'success');
+    }
+    setCropperOpen(false);
+    setCroppingMemberId(null);
   };
 
   const handleAddSelected = async () => {
@@ -1318,6 +1333,17 @@ export default function MembersModal({ onClose }: Props) {
           <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary" onClick={onClose}>Close</motion.button>
         </div>
       </motion.div>
+
+      {/* Avatar Cropper Modal for member avatar uploads */}
+      <AvatarCropperModal
+        isOpen={cropperOpen}
+        imageSrc={cropperImageSrc}
+        onClose={() => {
+          setCropperOpen(false);
+          setCroppingMemberId(null);
+        }}
+        onApply={handleCropperApply}
+      />
     </div>
   );
 }

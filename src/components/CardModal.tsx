@@ -562,9 +562,9 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
         </div>
 
         {/* Modal Body: 2 Columns */}
-        <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 28, padding: '20px 28px 28px 28px' }}>
+        <div className="modal-body card-modal-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 290px', gap: 28, padding: '20px 28px 28px 28px', overflowX: 'hidden', width: '100%', boxSizing: 'border-box' }}>
           {/* Main Area */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0, width: '100%', overflow: 'hidden' }}>
             {/* Title Field */}
             <div className="form-group" style={{ margin: 0 }}>
               <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 6px 0' }}>
@@ -675,6 +675,10 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                           backgroundColor: 'hsl(var(--card))',
                           border: '1px solid hsl(var(--border))',
                           transition: 'border-color 0.15s ease',
+                          flexWrap: 'wrap',
+                          minWidth: 0,
+                          width: '100%',
+                          boxSizing: 'border-box',
                         }}
                       >
                         {/* Thumbnail or File Type Badge */}
@@ -754,7 +758,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                         </div>
 
                         {/* Action buttons with prominent Download */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 'auto' }}>
                           {isImg && (
                             <>
                               <motion.button
@@ -1266,7 +1270,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
           </div>
 
           {/* Sidebar Controls */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingLeft: 18, borderLeft: '1px solid hsl(var(--border) / 0.4)' }}>
+          <div className="card-modal-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingLeft: 18, borderLeft: '1px solid hsl(var(--border) / 0.4)', minWidth: 0, width: '100%', boxSizing: 'border-box' }}>
             {/* Status Button */}
             <div className="form-group">
               <label className="field-label">Status</label>

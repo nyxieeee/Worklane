@@ -125,8 +125,19 @@ export default function Topbar({
                   />
                 ) : (
                   <div
-                    className="card-avatar"
-                    style={{ backgroundColor: m.color, width: 26, height: 26, fontSize: 10 }}
+                    style={{
+                      backgroundColor: m.color || '#6366f1',
+                      width: 26,
+                      height: 26,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: '#fff',
+                      margin: 0,
+                    }}
                   >
                     {avatarInitials(m.name)}
                   </div>

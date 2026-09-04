@@ -437,6 +437,13 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
                   subject: `Reminder: Task Due Soon - ${card.title}`,
                   body: `Hi ${member.name},\n\nThe task "${card.title}" is due soon (${formatDueDate(card.dueDate)}) on board "${board.name}".\n\nWorklane Team`,
                   eventType: 'due_reminder',
+                  metadata: {
+                    cardTitle: card.title,
+                    boardName: board.name,
+                    cardId: card.id,
+                    boardId: board.id,
+                    dueDate: card.dueDate || undefined,
+                  },
                 });
               }
             });
@@ -448,7 +455,7 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
             overdueChanged = true;
 
             const targetRecipients = (card.assignees && card.assignees.length > 0)
-              ? (card.assignees || []).map(mId => board.members?.find(m => m.id === mId)).filter(Boolean)
+              ? (card.assignees || []).map(mId => board.members?.find(m => m.id === mId || (m.email && m.email.toLowerCase().trim() === mId.toLowerCase().trim()))).filter(Boolean)
               : (board.members || []);
 
             targetRecipients.forEach(member => {
@@ -463,6 +470,13 @@ function saveAlertedSet(key: string, setObj: Set<string>) {
                   subject: `Alert: Task is Overdue - ${card.title}`,
                   body: `Hi ${member.name},\n\nThe task "${card.title}" was due on ${formatDueDate(card.dueDate)} and is now overdue on board "${board.name}".\n\nWorklane Team`,
                   eventType: 'due_reminder',
+                  metadata: {
+                    cardTitle: card.title,
+                    boardName: board.name,
+                    cardId: card.id,
+                    boardId: board.id,
+                    dueDate: card.dueDate || undefined,
+                  },
                 });
               }
             });

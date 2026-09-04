@@ -801,6 +801,12 @@ export const useWorkStore = create<WorkState>()(
                   subject: `Status Update: ${updatedTitle} is ${isNowComplete ? 'Completed' : 'Reopened'}`,
                   body: `Hi ${member.name},\n\nThe task "${updatedTitle}" was marked as ${isNowComplete ? 'completed' : 'incomplete'} on board "${tb.name}".\n\nBest regards,\nWorklane Team`,
                   eventType: 'status_changed',
+                  metadata: {
+                    cardTitle: updatedTitle,
+                    boardName: tb.name,
+                    cardId,
+                    boardId: tb.id,
+                  },
                 });
               }
             }
@@ -882,6 +888,12 @@ export const useWorkStore = create<WorkState>()(
               subject: `New Task Assigned: ${assignedCardTitle}`,
               body: `Hi ${member.name},\n\nYou have been assigned to the card "${assignedCardTitle}" on board "${tb.name}".\n\nBest regards,\nWorklane Team`,
               eventType: 'card_assigned',
+              metadata: {
+                cardTitle: assignedCardTitle,
+                boardName: tb.name,
+                cardId,
+                boardId: tb.id,
+              },
             });
           }
 
@@ -998,6 +1010,13 @@ export const useWorkStore = create<WorkState>()(
                 subject: `[Mention] ${authorName} mentioned you on "${cardTitle}"`,
                 body: `Hi ${m.name},\n\n${authorName} mentioned you in a comment on card "${cardTitle}" in board "${tb.name}":\n\n"${text}"\n\nBest regards,\nWorklane Team`,
                 eventType: 'mention',
+                metadata: {
+                  cardTitle,
+                  boardName: tb.name,
+                  cardId,
+                  boardId: tb.id,
+                  actorName: authorName,
+                },
               });
             }
           });
@@ -1019,6 +1038,13 @@ export const useWorkStore = create<WorkState>()(
                   subject: `New Comment on "${cardTitle}"`,
                   body: `Hi ${member.name},\n\n${authorName} commented on task "${cardTitle}" in board "${tb.name}":\n\n"${text}"\n\nBest regards,\nWorklane Team`,
                   eventType: 'comment_added',
+                  metadata: {
+                    cardTitle,
+                    boardName: tb.name,
+                    cardId,
+                    boardId: tb.id,
+                    actorName: authorName,
+                  },
                 });
               }
             }

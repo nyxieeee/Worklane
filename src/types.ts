@@ -84,7 +84,7 @@ export interface EmailNotificationLog {
   subject: string;
   body: string;
   sentAt: string;
-  status: 'sent' | 'simulated' | 'failed';
+  status: 'sent' | 'failed';
   eventType: 'card_assigned' | 'status_changed' | 'due_reminder' | 'comment_added' | 'member_added' | 'mention';
 }
 

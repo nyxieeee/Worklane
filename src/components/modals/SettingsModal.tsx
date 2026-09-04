@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import {
   X, Sun, Moon, Bell, Shield, Sliders, Mail, Tag, Plus, Trash2, Check,
-  AlertTriangle, Upload, Download, RefreshCw, Send, CheckCircle2, User, Camera, Image, Sparkles
+  AlertTriangle, Upload, Download, RefreshCw, Send, CheckCircle2, User, Camera, Image, Sparkles,
+  Globe, AlertCircle, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useThemeStore } from '../../store/useThemeStore';
@@ -58,9 +59,8 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
 
   const emailSettings = useEmailStore(s => s.settings);
   const updateEmailSettings = useEmailStore(s => s.updateSettings);
-  const emailLogs = useEmailStore(s => s.logs);
-  const clearEmailLogs = useEmailStore(s => s.clearLogs);
-  const sendEmailNotification = useEmailStore(s => s.sendEmailNotification);
+  const isEmailConfigured = useEmailStore(s => s.isConfigured());
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
 
   // Profile Edit Local State
   const [displayName, setDisplayName] = useState(user?.name || '');
@@ -192,23 +192,22 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
     reader.readAsText(file);
   };
 
-  const handleSendTestEmail = () => {
+  const handleSendTestEmail = async () => {
     if (!testEmail.trim()) {
       showToast('Please enter an email address', 'error');
       return;
     }
-    sendEmailNotification({
-      recipient: {
-        id: 'test',
-        name: testEmail.split('@')[0],
-        email: testEmail.trim(),
-        color: '#6366f1'
-      },
-      subject: testSubject,
-      body: testBody,
-      eventType: 'status_changed'
-    });
-    showToast(`Test notification logged for ${testEmail.trim()}`, 'success');
+    setIsSendingTestEmail(true);
+    try {
+      const res = await useEmailStore.getState().testEmailNotification(testEmail.trim());
+      if (res.success) {
+        showToast(res.message, 'success');
+      } else {
+        showToast(res.message, 'warning');
+      }
+    } finally {
+      setIsSendingTestEmail(false);
+    }
   };
 
   const navTabs: Array<{ key: TabKey; label: string; icon: React.ReactNode }> = [
@@ -714,45 +713,102 @@ export default function SettingsModal({ initialTab = 'profile', onClose }: Props
             {activeTab === 'email' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--foreground))', marginBottom: 2 }}>Email Notification Dispatcher</h3>
-                  <p style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Dispatch simulated or production-ready email alerts when cards change.</p>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--foreground))', marginBottom: 2 }}>Automated Email Notifications</h3>
+                  <p style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>Automated emails for task assignments, deadlines, @mentions, and board movements.</p>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 'var(--radius)', backgroundColor: 'hsl(var(--background))', boxShadow: 'var(--neu-shadow-raised-sm)', cursor: 'pointer' }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>Enable Notification Dispatcher</div>
-                      <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))' }}>Triggers email alerts on member assignments and status movements</div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={emailSettings.enabled}
-                      onChange={e => updateEmailSettings({ enabled: e.target.checked })}
-                      style={{ width: 16, height: 16, accentColor: 'hsl(var(--primary))' }}
-                    />
-                  </label>
+                {/* Master Switch */}
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 'var(--radius)', backgroundColor: 'hsl(var(--background))', boxShadow: 'var(--neu-shadow-raised-sm)', cursor: 'pointer' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--foreground))' }}>Enable Email Delivery</div>
+                    <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))' }}>Dispatches email notifications when trigger events happen</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={emailSettings.enabled}
+                    onChange={e => {
+                      updateEmailSettings({ enabled: e.target.checked });
+                      showToast(e.target.checked ? 'Email notifications enabled' : 'Email notifications paused', 'info');
+                    }}
+                    style={{ width: 16, height: 16, accentColor: 'hsl(var(--primary))' }}
+                  />
+                </label>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>Send Instant Test Notification</label>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                {/* Event Preferences */}
+                <div
+                  style={{
+                    padding: '14px 16px',
+                    borderRadius: 'var(--radius)',
+                    backgroundColor: 'hsl(var(--background))',
+                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10
+                  }}
+                >
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'hsl(var(--foreground))' }}>Notification Triggers</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'hsl(var(--foreground))', cursor: 'pointer' }}>
                       <input
-                        type="email"
-                        placeholder="recipient@company.com"
-                        value={testEmail}
-                        onChange={e => setTestEmail(e.target.value)}
-                        className="text-input"
-                        style={{ height: 36, fontSize: 12.5, flex: 1 }}
+                        type="checkbox"
+                        checked={emailSettings.notifyOnAssign}
+                        onChange={e => updateEmailSettings({ notifyOnAssign: e.target.checked })}
+                        style={{ accentColor: 'hsl(var(--primary))' }}
                       />
-                      <motion.button
-                        whileTap={{ scale: 0.95 }}
-                        className="btn btn-primary"
-                        onClick={handleSendTestEmail}
-                        style={{ fontSize: 12, padding: '0 14px', gap: 6 }}
-                      >
-                        <Send size={13} />
-                        <span>Send Test</span>
-                      </motion.button>
-                    </div>
+                      Notify member on task assignment
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'hsl(var(--foreground))', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={emailSettings.notifyOnDue}
+                        onChange={e => updateEmailSettings({ notifyOnDue: e.target.checked })}
+                        style={{ accentColor: 'hsl(var(--primary))' }}
+                      />
+                      Notify member on due dates & overdue alerts
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'hsl(var(--foreground))', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={emailSettings.notifyOnStatusChange}
+                        onChange={e => updateEmailSettings({ notifyOnStatusChange: e.target.checked })}
+                        style={{ accentColor: 'hsl(var(--primary))' }}
+                      />
+                      Notify member on task status changes (completed / reopened)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'hsl(var(--foreground))', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={emailSettings.notifyOnMention ?? true}
+                        onChange={e => updateEmailSettings({ notifyOnMention: e.target.checked })}
+                        style={{ accentColor: 'hsl(var(--primary))' }}
+                      />
+                      Notify member on @mentions in comments
+                    </label>
+                  </div>
+                </div>
+
+                {/* Test Dispatch */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))' }}>Send Instant Test Notification</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="email"
+                      placeholder="recipient@company.com"
+                      value={testEmail}
+                      onChange={e => setTestEmail(e.target.value)}
+                      className="text-input"
+                      style={{ height: 36, fontSize: 12.5, flex: 1 }}
+                    />
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      className="btn btn-primary"
+                      onClick={handleSendTestEmail}
+                      disabled={isSendingTestEmail}
+                      style={{ fontSize: 12, padding: '0 14px', gap: 6 }}
+                    >
+                      {isSendingTestEmail ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                      <span>Send Test</span>
+                    </motion.button>
                   </div>
                 </div>
               </div>

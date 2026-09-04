@@ -176,6 +176,11 @@ export default function MembersModal({ onClose }: Props) {
           subject: `You've been added to board "${board.name}" on Worklane`,
           body: `Hi ${selectedUser.name},\n\n${adderName} added you as ${role === 'observer' ? 'an Observer (study mode)' : role === 'admin' ? 'an Admin' : 'a Member'} to collaborate on board "${board.name}".\n\nWorklane Team`,
           eventType: 'member_added',
+          metadata: {
+            boardName: board.name,
+            boardId: board.id,
+            actorName: adderName,
+          },
         });
 
         showToast(`Added ${selectedUser.name} (${role === 'observer' ? 'Observer' : role === 'admin' ? 'Admin' : 'Member'}) to "${board.name}"`, 'success');

@@ -57,6 +57,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const addAttachment = useWorkStore(s => s.addAttachment);
   const removeAttachment = useWorkStore(s => s.removeAttachment);
   const addComment = useWorkStore(s => s.addComment);
+  const deleteComment = useWorkStore(s => s.deleteComment);
   const showToast = useToastStore(s => s.showToast);
   const showConfirm = useConfirmStore(s => s.showConfirm);
   const customLabels = useSettingsStore(s => s.customLabels);
@@ -73,9 +74,11 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
 
   // Mention State
   const [showMentionMenu, setShowMentionMenu] = useState(false);
+  const [mentionTarget, setMentionTarget] = useState<'comment' | 'reply' | null>(null);
   const [mentionQuery, setMentionQuery] = useState('');
   const [selectedMentionIdx, setSelectedMentionIdx] = useState(0);
   const commentInputRef = useRef<HTMLInputElement>(null);
+  const replyInputRef = useRef<HTMLInputElement>(null);
   const mentionBlurTimeoutRef = useRef<number | undefined>(undefined);
 
   const result = useMemo(() => {
@@ -114,6 +117,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
   const allLabels = [...LABELS, ...customLabels];
 
   const currentEmail = currentUser?.email?.toLowerCase().trim();
+  const currentUserName = currentUser?.name?.toLowerCase().trim();
   const currentMemberObj = members.find(m => m.email && currentEmail && m.email.toLowerCase().trim() === currentEmail);
   const isOwner = !!(
     (board.createdBy && currentEmail && board.createdBy.toLowerCase().trim() === currentEmail) ||
@@ -124,6 +128,45 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
 
   // Only the board owner or admins can assign team members. Regular members and observers cannot assign.
   const canAssign = isOwner || isAdmin;
+
+  // Check if current user is author of a comment/reply
+  const isCommentAuthor = (c: Comment) => {
+    if (c.authorId && currentUser?.id && c.authorId === currentUser.id) return true;
+    if (c.authorEmail && currentEmail && c.authorEmail.toLowerCase().trim() === currentEmail) return true;
+    const authorLower = (c.author || '').toLowerCase().trim();
+    if (!authorLower) return false;
+    if (currentUserName && authorLower === currentUserName) return true;
+    if (currentEmail && authorLower === currentEmail) return true;
+    if (currentMemberObj?.name && authorLower === currentMemberObj.name.toLowerCase().trim()) return true;
+    if (authorLower === 'me') return true;
+    return false;
+  };
+
+  // Owner, admin, or the comment author can delete comments
+  const canDeleteComment = (c: Comment) => {
+    return isOwner || isAdmin || isCommentAuthor(c);
+  };
+
+  const handleDeleteComment = (comment: Comment, isReply = false) => {
+    showConfirm({
+      title: isReply ? 'Delete Reply' : 'Delete Comment',
+      message: isReply
+        ? 'Are you sure you want to delete this reply?'
+        : 'Are you sure you want to delete this comment? All replies under it will also be deleted.',
+      confirmText: 'Delete',
+      variant: 'danger',
+      icon: 'trash',
+      onConfirm: () => {
+        deleteComment(cardId, comment.id);
+        if (replyingTo?.id === comment.id) {
+          setReplyingTo(null);
+          setReplyText('');
+          setShowMentionMenu(false);
+        }
+        showToast(isReply ? 'Reply deleted' : 'Comment deleted', 'info');
+      },
+    });
+  };
 
   // ── Local title & description state with unsaved change tracking ──
   const [localTitle, setLocalTitle] = useState(card.title);
@@ -313,41 +356,90 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
       const query = textBeforeCursor.slice(lastAtIdx + 1);
       if (!query.includes('\n') && query.length <= 20) {
         setMentionQuery(query);
+        setMentionTarget('comment');
         setShowMentionMenu(true);
         setSelectedMentionIdx(0);
         return;
       }
     }
-    setShowMentionMenu(false);
+    if (mentionTarget === 'comment') {
+      setShowMentionMenu(false);
+    }
+  };
+
+  const handleReplyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setReplyText(val);
+
+    const cursorPos = e.target.selectionStart || val.length;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const lastAtIdx = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIdx !== -1) {
+      const query = textBeforeCursor.slice(lastAtIdx + 1);
+      if (!query.includes('\n') && query.length <= 20) {
+        setMentionQuery(query);
+        setMentionTarget('reply');
+        setShowMentionMenu(true);
+        setSelectedMentionIdx(0);
+        return;
+      }
+    }
+    if (mentionTarget === 'reply') {
+      setShowMentionMenu(false);
+    }
   };
 
   const handleSelectMention = (member: { name: string; email?: string }) => {
     if (mentionBlurTimeoutRef.current) {
       clearTimeout(mentionBlurTimeoutRef.current);
     }
-    const val = commentText;
-    const cursorPos = commentInputRef.current?.selectionStart || val.length;
-    const textBeforeCursor = val.slice(0, cursorPos);
-    const lastAtIdx = textBeforeCursor.lastIndexOf('@');
 
-    const textAfterCursor = val.slice(cursorPos);
-    const newTextBefore = lastAtIdx !== -1 ? textBeforeCursor.slice(0, lastAtIdx) : textBeforeCursor;
-    const newComment = `${newTextBefore}@${member.name} ${textAfterCursor}`;
-    setCommentText(newComment);
-    setShowMentionMenu(false);
-    setMentionQuery('');
+    if (mentionTarget === 'reply') {
+      const val = replyText;
+      const cursorPos = replyInputRef.current?.selectionStart || val.length;
+      const textBeforeCursor = val.slice(0, cursorPos);
+      const lastAtIdx = textBeforeCursor.lastIndexOf('@');
 
-    setTimeout(() => {
-      if (commentInputRef.current) {
-        commentInputRef.current.focus();
-        const nextPos = (newTextBefore + `@${member.name} `).length;
-        commentInputRef.current.setSelectionRange(nextPos, nextPos);
-      }
-    }, 10);
+      const textAfterCursor = val.slice(cursorPos);
+      const newTextBefore = lastAtIdx !== -1 ? textBeforeCursor.slice(0, lastAtIdx) : textBeforeCursor;
+      const newReply = `${newTextBefore}@${member.name} ${textAfterCursor}`;
+      setReplyText(newReply);
+      setShowMentionMenu(false);
+      setMentionQuery('');
+
+      setTimeout(() => {
+        if (replyInputRef.current) {
+          replyInputRef.current.focus();
+          const nextPos = (newTextBefore + `@${member.name} `).length;
+          replyInputRef.current.setSelectionRange(nextPos, nextPos);
+        }
+      }, 10);
+    } else {
+      const val = commentText;
+      const cursorPos = commentInputRef.current?.selectionStart || val.length;
+      const textBeforeCursor = val.slice(0, cursorPos);
+      const lastAtIdx = textBeforeCursor.lastIndexOf('@');
+
+      const textAfterCursor = val.slice(cursorPos);
+      const newTextBefore = lastAtIdx !== -1 ? textBeforeCursor.slice(0, lastAtIdx) : textBeforeCursor;
+      const newComment = `${newTextBefore}@${member.name} ${textAfterCursor}`;
+      setCommentText(newComment);
+      setShowMentionMenu(false);
+      setMentionQuery('');
+
+      setTimeout(() => {
+        if (commentInputRef.current) {
+          commentInputRef.current.focus();
+          const nextPos = (newTextBefore + `@${member.name} `).length;
+          commentInputRef.current.setSelectionRange(nextPos, nextPos);
+        }
+      }, 10);
+    }
   };
 
   const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (showMentionMenu && filteredMentionMembers.length > 0) {
+    if (showMentionMenu && mentionTarget === 'comment' && filteredMentionMembers.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedMentionIdx(i => (i + 1) % filteredMentionMembers.length);
@@ -375,6 +467,157 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
       handlePostComment();
     }
   };
+
+  const handleReplyKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, parentId: string, replyToAuthor: string) => {
+    if (showMentionMenu && mentionTarget === 'reply' && filteredMentionMembers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMentionIdx(i => (i + 1) % filteredMentionMembers.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMentionIdx(i => (i - 1 + filteredMentionMembers.length) % filteredMentionMembers.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const chosen = filteredMentionMembers[selectedMentionIdx] || filteredMentionMembers[0];
+        if (chosen) handleSelectMention(chosen);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowMentionMenu(false);
+        return;
+      }
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handlePostReply(parentId, replyToAuthor);
+    } else if (e.key === 'Escape') {
+      setReplyingTo(null);
+      setReplyText('');
+      setShowMentionMenu(false);
+    }
+  };
+
+  const triggerMentionInComment = () => {
+    if (mentionBlurTimeoutRef.current) {
+      clearTimeout(mentionBlurTimeoutRef.current);
+    }
+    setCommentText(prev => {
+      const needsSpace = prev.length > 0 && !prev.endsWith(' ');
+      return prev + (needsSpace ? ' @' : '@');
+    });
+    setMentionTarget('comment');
+    setShowMentionMenu(true);
+    setMentionQuery('');
+    setSelectedMentionIdx(0);
+    commentInputRef.current?.focus();
+  };
+
+  const triggerMentionInReply = () => {
+    if (mentionBlurTimeoutRef.current) {
+      clearTimeout(mentionBlurTimeoutRef.current);
+    }
+    setReplyText(prev => {
+      const needsSpace = prev.length > 0 && !prev.endsWith(' ');
+      return prev + (needsSpace ? ' @' : '@');
+    });
+    setMentionTarget('reply');
+    setShowMentionMenu(true);
+    setMentionQuery('');
+    setSelectedMentionIdx(0);
+    replyInputRef.current?.focus();
+  };
+
+  const renderMentionDropdown = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 6, scale: 0.97 }}
+      transition={{ duration: 0.12 }}
+      onMouseDown={e => {
+        e.preventDefault();
+        if (mentionBlurTimeoutRef.current) {
+          clearTimeout(mentionBlurTimeoutRef.current);
+        }
+      }}
+      style={{
+        position: 'absolute',
+        bottom: '100%',
+        left: 0,
+        marginBottom: 8,
+        width: 280,
+        maxHeight: 200,
+        overflowY: 'auto',
+        backgroundColor: 'hsl(var(--popover))',
+        borderRadius: 12,
+        boxShadow: 'var(--neu-shadow-floating)',
+        border: '1px solid hsl(var(--border) / 0.6)',
+        padding: 6,
+        zIndex: 100,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+      }}
+    >
+      <div style={{ padding: '4px 8px', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'hsl(var(--muted-foreground))', letterSpacing: '0.04em' }}>
+        Mention a member
+      </div>
+      {filteredMentionMembers.map((m, idx) => {
+        const isSelected = idx === selectedMentionIdx;
+        return (
+          <button
+            key={m.id}
+            type="button"
+            className={`sidebar-nav-item ${isSelected ? 'active' : ''}`}
+            style={{
+              padding: '6px 8px',
+              fontSize: 12,
+              borderRadius: 8,
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              textAlign: 'left',
+              backgroundColor: isSelected ? 'hsl(var(--primary) / 0.12)' : 'transparent',
+              color: isSelected ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+            onMouseDown={e => {
+              e.preventDefault();
+              if (mentionBlurTimeoutRef.current) {
+                clearTimeout(mentionBlurTimeoutRef.current);
+              }
+              handleSelectMention(m);
+            }}
+          >
+            {m.avatarUrl ? (
+              <img src={m.avatarUrl} alt={m.name} style={{ width: 22, height: 22, borderRadius: '50%' }} />
+            ) : (
+              <div style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: m.color || '#6366f1', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {avatarInitials(m.name)}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {m.name}
+              </span>
+              {m.email && (
+                <span style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {m.email}
+                </span>
+              )}
+            </div>
+          </button>
+        );
+      })}
+    </motion.div>
+  );
 
   const renderCommentText = (text: string) => {
     if (!text) return null;
@@ -833,111 +1076,17 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                     onMouseDown={e => {
                       e.preventDefault();
                     }}
-                    onClick={() => {
-                      if (mentionBlurTimeoutRef.current) {
-                        clearTimeout(mentionBlurTimeoutRef.current);
-                      }
-                      setCommentText(prev => {
-                        const needsSpace = prev.length > 0 && !prev.endsWith(' ');
-                        return prev + (needsSpace ? ' @' : '@');
-                      });
-                      setShowMentionMenu(true);
-                      setMentionQuery('');
-                      setSelectedMentionIdx(0);
-                      commentInputRef.current?.focus();
-                    }}
+                    onClick={triggerMentionInComment}
                   >
                     <AtSign size={12} /> Mention
                   </motion.button>
                 )}
               </div>
 
-              {/* Mention Autocomplete Dropdown */}
+              {/* Mention Autocomplete Dropdown for Main Comment */}
               <AnimatePresence>
-                {showMentionMenu && filteredMentionMembers.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.97 }}
-                    transition={{ duration: 0.12 }}
-                    onMouseDown={e => {
-                      e.preventDefault();
-                      if (mentionBlurTimeoutRef.current) {
-                        clearTimeout(mentionBlurTimeoutRef.current);
-                      }
-                    }}
-                    style={{
-                      position: 'absolute',
-                      bottom: '100%',
-                      left: 0,
-                      marginBottom: 8,
-                      width: 280,
-                      maxHeight: 200,
-                      overflowY: 'auto',
-                      backgroundColor: 'hsl(var(--popover))',
-                      borderRadius: 12,
-                      boxShadow: 'var(--neu-shadow-floating)',
-                      border: '1px solid hsl(var(--border) / 0.6)',
-                      padding: 6,
-                      zIndex: 100,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 2
-                    }}
-                  >
-                    <div style={{ padding: '4px 8px', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'hsl(var(--muted-foreground))', letterSpacing: '0.04em' }}>
-                      Mention a member
-                    </div>
-                    {filteredMentionMembers.map((m, idx) => {
-                      const isSelected = idx === selectedMentionIdx;
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          className={`sidebar-nav-item ${isSelected ? 'active' : ''}`}
-                          style={{
-                            padding: '6px 8px',
-                            fontSize: 12,
-                            borderRadius: 8,
-                            width: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            textAlign: 'left',
-                            backgroundColor: isSelected ? 'hsl(var(--primary) / 0.12)' : 'transparent',
-                            color: isSelected ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
-                            border: 'none',
-                            cursor: 'pointer'
-                          }}
-                          onMouseDown={e => {
-                            e.preventDefault();
-                            if (mentionBlurTimeoutRef.current) {
-                              clearTimeout(mentionBlurTimeoutRef.current);
-                            }
-                            handleSelectMention(m);
-                          }}
-                        >
-                          {m.avatarUrl ? (
-                            <img src={m.avatarUrl} alt={m.name} style={{ width: 22, height: 22, borderRadius: '50%' }} />
-                          ) : (
-                            <div style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: m.color || '#6366f1', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              {avatarInitials(m.name)}
-                            </div>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {m.name}
-                            </span>
-                            {m.email && (
-                              <span style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {m.email}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </motion.div>
+                {showMentionMenu && mentionTarget === 'comment' && filteredMentionMembers.length > 0 && (
+                  renderMentionDropdown()
                 )}
               </AnimatePresence>
 
@@ -951,13 +1100,16 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                   onChange={handleCommentChange}
                   onKeyDown={handleCommentKeyDown}
                   onFocus={() => {
+                    setMentionTarget('comment');
                     if (mentionBlurTimeoutRef.current) {
                       clearTimeout(mentionBlurTimeoutRef.current);
                     }
                   }}
                   onBlur={() => {
                     mentionBlurTimeoutRef.current = window.setTimeout(() => {
-                      setShowMentionMenu(false);
+                      if (mentionTarget === 'comment') {
+                        setShowMentionMenu(false);
+                      }
                     }, 250);
                   }}
                 />
@@ -1055,12 +1207,39 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                               {renderCommentText(c.text)}
                             </p>
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, marginTop: 4 }}>
+                              {canDeleteComment(c) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteComment(c, false)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'hsl(var(--muted-foreground))',
+                                    fontSize: 11,
+                                    fontWeight: 500,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    transition: 'color 0.15s ease',
+                                  }}
+                                  title="Delete comment"
+                                  onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                                  onMouseLeave={e => (e.currentTarget.style.color = 'hsl(var(--muted-foreground))')}
+                                >
+                                  <Trash2 size={11} /> Delete
+                                </button>
+                              )}
+
                               <motion.button
                                 whileTap={{ scale: 0.94 }}
                                 onClick={() => {
                                   setReplyingTo({ id: c.id, author: c.author } as Comment);
                                   setReplyText('');
+                                  setShowMentionMenu(false);
                                 }}
                                 style={{
                                   background: 'hsl(var(--secondary))',
@@ -1159,11 +1338,39 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                   <p style={{ fontSize: 12, color: 'hsl(var(--foreground))', lineHeight: 1.35, margin: '2px 0 4px 0' }}>
                                     {renderCommentText(reply.text)}
                                   </p>
-                                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                                    {canDeleteComment(reply) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteComment(reply, true)}
+                                        style={{
+                                          background: 'none',
+                                          border: 'none',
+                                          color: 'hsl(var(--muted-foreground))',
+                                          fontSize: 10.5,
+                                          fontWeight: 500,
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                          padding: '1px 5px',
+                                          borderRadius: 4,
+                                          transition: 'color 0.15s ease',
+                                        }}
+                                        title="Delete reply"
+                                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                                        onMouseLeave={e => (e.currentTarget.style.color = 'hsl(var(--muted-foreground))')}
+                                      >
+                                        <Trash2 size={10} /> Delete
+                                      </button>
+                                    )}
+
                                     <button
+                                      type="button"
                                       onClick={() => {
                                         setReplyingTo({ id: c.id, author: reply.author } as Comment);
                                         setReplyText('');
+                                        setShowMentionMenu(false);
                                       }}
                                       style={{
                                         background: 'none',
@@ -1204,18 +1411,39 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: 6,
+                                position: 'relative',
                               }}
                             >
+                              {/* Mention Autocomplete Dropdown for Reply */}
+                              <AnimatePresence>
+                                {showMentionMenu && mentionTarget === 'reply' && filteredMentionMembers.length > 0 && (
+                                  renderMentionDropdown()
+                                )}
+                              </AnimatePresence>
+
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: 'hsl(var(--primary))' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: 'hsl(var(--primary))' }}>
                                   <Reply size={11} />
                                   <span>Replying to <strong>@{replyingTo.author}</strong></span>
+                                  {members.length > 0 && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      style={{ fontSize: 10, padding: '1px 6px', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3, height: 20 }}
+                                      onMouseDown={e => e.preventDefault()}
+                                      onClick={triggerMentionInReply}
+                                      title="Mention someone in reply"
+                                    >
+                                      <AtSign size={10} /> Mention
+                                    </button>
+                                  )}
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setReplyingTo(null);
                                     setReplyText('');
+                                    setShowMentionMenu(false);
                                   }}
                                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--muted-foreground))', padding: 2 }}
                                   title="Cancel reply"
@@ -1226,20 +1454,26 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
 
                               <div style={{ display: 'flex', gap: 6 }}>
                                 <input
+                                  ref={replyInputRef}
                                   autoFocus
                                   type="text"
                                   className="text-input"
-                                  placeholder={`Reply to @${replyingTo.author}...`}
+                                  placeholder={`Reply to @${replyingTo.author} or type @ to mention...`}
                                   value={replyText}
-                                  onChange={e => setReplyText(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                      e.preventDefault();
-                                      handlePostReply(c.id, replyingTo.author);
-                                    } else if (e.key === 'Escape') {
-                                      setReplyingTo(null);
-                                      setReplyText('');
+                                  onChange={handleReplyChange}
+                                  onKeyDown={e => handleReplyKeyDown(e, c.id, replyingTo.author)}
+                                  onFocus={() => {
+                                    setMentionTarget('reply');
+                                    if (mentionBlurTimeoutRef.current) {
+                                      clearTimeout(mentionBlurTimeoutRef.current);
                                     }
+                                  }}
+                                  onBlur={() => {
+                                    mentionBlurTimeoutRef.current = window.setTimeout(() => {
+                                      if (mentionTarget === 'reply') {
+                                        setShowMentionMenu(false);
+                                      }
+                                    }, 250);
                                   }}
                                   style={{ fontSize: 12, padding: '6px 10px' }}
                                 />

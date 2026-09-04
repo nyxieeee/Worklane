@@ -992,6 +992,8 @@ export const useWorkStore = create<WorkState>()(
           text,
           parentId: parentId || null,
           replyToAuthor: replyToAuthor || null,
+          authorEmail: currentUser?.email || undefined,
+          authorId: currentUser?.id || undefined,
           createdAt: new Date().toISOString(),
         };
 
@@ -1051,6 +1053,39 @@ export const useWorkStore = create<WorkState>()(
             }
           });
 
+          // If this is a reply, also notify the person being replied to
+          if (replyToAuthor) {
+            const repliedMember = (tb.members || []).find(m =>
+              (m.name && m.name.toLowerCase().trim() === replyToAuthor.toLowerCase().trim()) ||
+              (m.email && m.email.toLowerCase().trim() === replyToAuthor.toLowerCase().trim())
+            );
+            if (repliedMember && repliedMember.email) {
+              const rEmail = repliedMember.email.toLowerCase().trim();
+              const isSelf = currentUser?.email && rEmail === currentUser.email.toLowerCase().trim();
+              if (!isSelf && !notifiedEmails.has(rEmail)) {
+                notifiedEmails.add(rEmail);
+                useNotifStore.getState().addNotification(
+                  `Reply: ${cardTitle}`,
+                  `${authorName} replied to your comment on "${cardTitle}"`,
+                  'message', cardId, tb.id, repliedMember.email
+                );
+                useEmailStore.getState().sendEmailNotification({
+                  recipient: repliedMember,
+                  subject: `[Reply] ${authorName} replied to your comment on "${cardTitle}"`,
+                  body: `Hi ${repliedMember.name},\n\n${authorName} replied to your comment on card "${cardTitle}" in board "${tb.name}":\n\n"${text}"\n\nBest regards,\nWorklane Team`,
+                  eventType: 'comment_added',
+                  metadata: {
+                    cardTitle,
+                    boardName: tb.name,
+                    cardId,
+                    boardId: tb.id,
+                    actorName: authorName,
+                  },
+                });
+              }
+            }
+          }
+
           cardAssignees.forEach(mId => {
             const member = tb.members?.find(m => m.id === mId || (m.email && m.email.toLowerCase().trim() === mId.toLowerCase().trim()));
             if (member && member.email) {
@@ -1097,7 +1132,7 @@ export const useWorkStore = create<WorkState>()(
 
           const updatedBoards = updateBoards(s.boards, tb.id, b =>
             updateCardInBoard(b, cardId, c => ({
-              ...c, comments: (c.comments || []).filter(cm => cm.id !== commentId),
+              ...c, comments: (c.comments || []).filter(cm => cm.id !== commentId && cm.parentId !== commentId),
             }))
           );
           targetBoard = updatedBoards.find(b => b.id === tb.id);

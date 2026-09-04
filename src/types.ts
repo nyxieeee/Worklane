@@ -30,6 +30,8 @@ export interface Comment {
   createdAt: string;
   parentId?: string | null;
   replyToAuthor?: string | null;
+  authorEmail?: string;
+  authorId?: string;
 }
 
 export interface Card {

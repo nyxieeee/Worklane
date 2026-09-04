@@ -15,7 +15,7 @@ interface Props {
   onOpenInbox?: () => void;
   onManageMembers?: () => void;
   onManageEmail?: () => void;
-  onOpenPrivacy: () => void;
+  onOpenPrivacy?: () => void;
   onOpenSettings?: (tab?: 'profile' | 'appearance' | 'notifications' | 'email' | 'privacy' | 'labels') => void;
   onToggleNotif: () => void;
   notifOpen: boolean;
@@ -336,15 +336,6 @@ export default function Topbar({
                 >
                   <User size={13} />
                   <span>Edit Profile & Avatar</span>
-                </motion.button>
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
-                  className="sidebar-nav-item"
-                  style={{ width: '100%', fontSize: 12.5 }}
-                  onClick={() => { onOpenPrivacy(); setUserDropOpen(false); }}
-                >
-                  <Shield size={13} />
-                  <span>Privacy & Data</span>
                 </motion.button>
                 <motion.button
                   whileTap={{ scale: 0.97 }}

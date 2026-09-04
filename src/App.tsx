@@ -41,6 +41,7 @@ const page3DVariants: Variants = {
 export default function App() {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
   const initializeAuth = useAuthStore(s => s.initializeAuth);
+  const boards = useWorkStore(s => s.boards);
   const activeBoardId = useWorkStore(s => s.activeBoardId);
   const switchBoard = useWorkStore(s => s.switchBoard);
   const updateCard = useWorkStore(s => s.updateCard);
@@ -330,20 +331,19 @@ export default function App() {
     }
   }, [isAuthenticated]);
 
-  // If currently on a board that gets deleted, safely switch to next board or return to overview
+  // If currently on a board that gets deleted or left, safely switch to next board or return to overview
   useEffect(() => {
     if (page === 'board') {
-      const currentBoards = useWorkStore.getState().boards;
-      const boardExists = currentBoards.some(b => b.id === activeBoardId);
+      const boardExists = boards.some(b => b.id === activeBoardId);
       if (!boardExists) {
-        if (currentBoards.length > 0) {
-          switchBoard(currentBoards[0].id);
+        if (boards.length > 0) {
+          switchBoard(boards[0].id);
         } else {
           setPage('dashboard');
         }
       }
     }
-  }, [page, activeBoardId, switchBoard]);
+  }, [page, activeBoardId, boards, switchBoard]);
 
   const handleSelectBoard = useCallback((boardId: string) => {
     switchBoard(boardId);

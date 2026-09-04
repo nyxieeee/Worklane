@@ -126,6 +126,7 @@ function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => C
 
 const syncTimers = new Map<string, number>();
 const recentlyRemovedEmails = new Map<string, number>(); // email -> timestamp ms
+const recentlyAddedMembers = new Map<string, number>(); // email -> timestamp ms
 
 export function scheduleBoardSync(board: Board, delayMs = 60) {
   if (!board || !board.id) return;
@@ -175,7 +176,10 @@ export const useWorkStore = create<WorkState>()(
           set(s => {
             const now = Date.now();
             for (const [em, t] of recentlyRemovedEmails.entries()) {
-              if (now - t > 10000) recentlyRemovedEmails.delete(em);
+              if (now - t > 6000) recentlyRemovedEmails.delete(em);
+            }
+            for (const [em, t] of recentlyAddedMembers.entries()) {
+              if (now - t > 6000) recentlyAddedMembers.delete(em);
             }
 
             const finalBoards = cloudBoards.map(cb => {
@@ -194,10 +198,10 @@ export const useWorkStore = create<WorkState>()(
                 m => !m.email || !recentlyRemovedEmails.has(m.email.toLowerCase().trim())
               );
 
-              // Preserve any locally added members that have not yet been returned in the cloud response
+              // ONLY preserve locally added members if this client explicitly added them in the last 6s and cloud hasn't returned them yet
               const cloudEmails = new Set(cloudMembersFiltered.map(m => (m.email || '').toLowerCase().trim()).filter(Boolean));
               const localPendingMembers = (memBoard.members || []).filter(
-                m => m.email && !cloudEmails.has(m.email.toLowerCase().trim()) && !recentlyRemovedEmails.has(m.email.toLowerCase().trim())
+                m => m.email && !cloudEmails.has(m.email.toLowerCase().trim()) && recentlyAddedMembers.has(m.email.toLowerCase().trim()) && !recentlyRemovedEmails.has(m.email.toLowerCase().trim())
               );
 
               const mergedMembers = sortMembersWithOwnerFirst(
@@ -405,6 +409,9 @@ export const useWorkStore = create<WorkState>()(
         const email = userEmail.toLowerCase().trim();
         let memberId: string | undefined;
 
+        recentlyRemovedEmails.set(email, Date.now());
+        recentlyAddedMembers.delete(email);
+
         set(s => {
           const board = s.boards.find(b => b.id === boardId);
           if (!board) return s;
@@ -428,6 +435,9 @@ export const useWorkStore = create<WorkState>()(
 
       joinBoardFromCloud: async (boardId, role, user) => {
         const cleanEmail = user.email.toLowerCase().trim();
+        recentlyAddedMembers.set(cleanEmail, Date.now());
+        recentlyRemovedEmails.delete(cleanEmail);
+
         const memberId = uid();
         const newMember: Member = {
           id: memberId,
@@ -1086,7 +1096,10 @@ export const useWorkStore = create<WorkState>()(
         const cleanEmail = email ? email.toLowerCase().trim() : '';
 
         // If it was recently marked removed, clear it from the removal blocklist
-        if (cleanEmail) recentlyRemovedEmails.delete(cleanEmail);
+        if (cleanEmail) {
+          recentlyRemovedEmails.delete(cleanEmail);
+          recentlyAddedMembers.set(cleanEmail, Date.now());
+        }
 
         set(s => {
           const currentBoard = s.boards.find(b => b.id === currentActiveId);
@@ -1175,7 +1188,9 @@ export const useWorkStore = create<WorkState>()(
           const memberObj = currentBoard?.members.find(m => m.id === memberId);
           removedEmail = memberObj?.email;
           if (removedEmail) {
-            recentlyRemovedEmails.set(removedEmail.toLowerCase().trim(), Date.now());
+            const cleanRemoved = removedEmail.toLowerCase().trim();
+            recentlyRemovedEmails.set(cleanRemoved, Date.now());
+            recentlyAddedMembers.delete(cleanRemoved);
           }
 
           const updatedBoards = updateBoards(s.boards, s.activeBoardId, b => ({

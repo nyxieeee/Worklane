@@ -1038,53 +1038,64 @@ export const supabaseService = {
   async removeMemberFromBoard(boardId: string, email?: string, memberId?: string): Promise<boolean> {
     if (!isSupabaseConfigured() || !boardId) return false;
     try {
-      if (memberId) {
-        // 1. Remove from card assignees on this board
-        await supabase
-          .from('card_assignees')
-          .delete()
-          .eq('board_id', boardId)
-          .eq('member_id', memberId);
+      const cleanEmail = email ? email.toLowerCase().trim() : '';
+      const targetMemberIds: string[] = [];
+      if (memberId) targetMemberIds.push(memberId);
 
-        // 2. Remove from board members
-        await supabase
-          .from('board_members')
-          .delete()
-          .eq('board_id', boardId)
-          .eq('id', memberId);
-      }
-
-      if (email) {
-        const cleanEmail = email.toLowerCase().trim();
-        // Query any matching member IDs for assignee cleanup
+      // Find all matching member IDs for this board and email
+      if (cleanEmail) {
         const { data: rows } = await supabase
           .from('board_members')
           .select('id')
           .eq('board_id', boardId)
           .ilike('email', cleanEmail);
-
         if (rows && rows.length > 0) {
-          const ids = rows.map(r => r.id);
+          rows.forEach(r => {
+            if (!targetMemberIds.includes(r.id)) targetMemberIds.push(r.id);
+          });
+        }
+      }
+
+      // 1. Remove from card assignees on this board (via card_id)
+      if (targetMemberIds.length > 0) {
+        const { data: boardCards } = await supabase
+          .from('cards')
+          .select('id')
+          .eq('board_id', boardId);
+        const cardIds = (boardCards || []).map(c => c.id);
+        if (cardIds.length > 0) {
           await supabase
             .from('card_assignees')
             .delete()
-            .eq('board_id', boardId)
-            .in('member_id', ids);
+            .in('card_id', cardIds)
+            .in('member_id', targetMemberIds);
+        }
+      }
 
-          await supabase
+      // 2. Delete member record from board_members
+      const deletePromises: any[] = [];
+      if (targetMemberIds.length > 0) {
+        deletePromises.push(
+          supabase
             .from('board_members')
             .delete()
             .eq('board_id', boardId)
-            .in('id', ids);
-        }
-
-        await supabase
-          .from('board_members')
-          .delete()
-          .eq('board_id', boardId)
-          .ilike('email', cleanEmail);
+            .in('id', targetMemberIds)
+        );
       }
-      this.broadcastUpdate('boards', { boardId });
+      if (cleanEmail) {
+        deletePromises.push(
+          supabase
+            .from('board_members')
+            .delete()
+            .eq('board_id', boardId)
+            .ilike('email', cleanEmail)
+        );
+      }
+      await Promise.all(deletePromises);
+
+      // 3. Broadcast instant peer-to-peer realtime update to all devices
+      await this.broadcastUpdate('boards', { boardId, action: 'member_left', email: cleanEmail });
       return true;
     } catch (err) {
       console.warn('[SupabaseService] Error removing board member:', err);

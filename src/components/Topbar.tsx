@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Bell, Users, Mail, Search, LogOut, Shield, ChevronRight, Settings, Inbox, Crown, Eye, User } from 'lucide-react';
+import { Bell, Mail, Search, LogOut, Shield, ChevronRight, Settings, Inbox, Crown, Eye, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWorkStore } from '../store/useWorkStore';
 import { useNotifStore } from '../store/useNotifStore';
@@ -154,16 +154,6 @@ export default function Topbar({
 
 
 
-        {page === 'board' && onManageMembers && (
-          <motion.button
-            whileTap={{ scale: 0.92 }}
-            className="icon-btn"
-            title="Team Members"
-            onClick={onManageMembers}
-          >
-            <Users size={15} />
-          </motion.button>
-        )}
 
         {page === 'board' && onManageEmail && (
           <motion.button

@@ -190,6 +190,7 @@ export default function BoardArea({
           borderBottom: '1px solid hsl(var(--border) / 0.5)',
           gap: 12,
           flexWrap: 'wrap',
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

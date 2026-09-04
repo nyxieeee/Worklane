@@ -347,31 +347,109 @@ export const supabaseService = {
 
         await supabase.from('cards').upsert(cardRows, { onConflict: 'id' });
 
-        // Batch Assignees
-        const assigneeRows: any[] = [];
+        // Batch Assignees (Non-destructive Diff Sync)
+        const desiredAssigneesMap = new Map<string, { card_id: string; member_id: string }>();
         allCardsWithMeta.forEach(item => {
           (item.card.assignees || []).filter(Boolean).forEach(mId => {
-            assigneeRows.push({ card_id: item.card.id, member_id: mId });
+            const key = `${item.card.id}:::${mId}`;
+            desiredAssigneesMap.set(key, { card_id: item.card.id, member_id: mId });
           });
         });
+
         if (currentCardIds.length > 0) {
-          await supabase.from('card_assignees').delete().in('card_id', currentCardIds);
-          if (assigneeRows.length > 0) {
-            await supabase.from('card_assignees').upsert(assigneeRows, { onConflict: 'card_id,member_id' });
+          const { data: existingAssignees, error: fetchAErr } = await supabase
+            .from('card_assignees')
+            .select('id, card_id, member_id')
+            .in('card_id', currentCardIds);
+
+          if (!fetchAErr && existingAssignees) {
+            const existingMap = new Map<string, string>();
+            existingAssignees.forEach(row => {
+              existingMap.set(`${row.card_id}:::${row.member_id}`, row.id);
+            });
+
+            const toInsert: Array<{ card_id: string; member_id: string }> = [];
+            desiredAssigneesMap.forEach((val, key) => {
+              if (!existingMap.has(key)) {
+                toInsert.push(val);
+              }
+            });
+
+            const toDeleteIds: string[] = [];
+            existingMap.forEach((rowId, key) => {
+              if (!desiredAssigneesMap.has(key)) {
+                toDeleteIds.push(rowId);
+              }
+            });
+
+            let insErr: any = null;
+            if (toInsert.length > 0) {
+              const res = await supabase.from('card_assignees').upsert(toInsert, { onConflict: 'card_id,member_id', ignoreDuplicates: true });
+              insErr = res.error;
+              if (insErr) console.warn('[SupabaseService] Assignee upsert warning:', insErr);
+            }
+            if (!insErr && toDeleteIds.length > 0) {
+              const { error: delErr } = await supabase.from('card_assignees').delete().in('id', toDeleteIds);
+              if (delErr) console.warn('[SupabaseService] Assignee delete warning:', delErr);
+            }
+          } else {
+            const fallbackRows = Array.from(desiredAssigneesMap.values());
+            if (fallbackRows.length > 0) {
+              await supabase.from('card_assignees').upsert(fallbackRows, { onConflict: 'card_id,member_id', ignoreDuplicates: true });
+            }
           }
         }
 
-        // Batch Labels
-        const labelRows: any[] = [];
+        // Batch Labels (Non-destructive Diff Sync)
+        const desiredLabelsMap = new Map<string, { card_id: string; label_id: string }>();
         allCardsWithMeta.forEach(item => {
           (item.card.labels || []).filter(Boolean).forEach(lId => {
-            labelRows.push({ card_id: item.card.id, label_id: lId });
+            const key = `${item.card.id}:::${lId}`;
+            desiredLabelsMap.set(key, { card_id: item.card.id, label_id: lId });
           });
         });
+
         if (currentCardIds.length > 0) {
-          await supabase.from('card_labels').delete().in('card_id', currentCardIds);
-          if (labelRows.length > 0) {
-            await supabase.from('card_labels').upsert(labelRows, { onConflict: 'card_id,label_id' });
+          const { data: existingLabels, error: fetchLErr } = await supabase
+            .from('card_labels')
+            .select('id, card_id, label_id')
+            .in('card_id', currentCardIds);
+
+          if (!fetchLErr && existingLabels) {
+            const existingLMap = new Map<string, string>();
+            existingLabels.forEach(row => {
+              existingLMap.set(`${row.card_id}:::${row.label_id}`, row.id);
+            });
+
+            const labelsToInsert: Array<{ card_id: string; label_id: string }> = [];
+            desiredLabelsMap.forEach((val, key) => {
+              if (!existingLMap.has(key)) {
+                labelsToInsert.push(val);
+              }
+            });
+
+            const labelIdsToDelete: string[] = [];
+            existingLMap.forEach((rowId, key) => {
+              if (!desiredLabelsMap.has(key)) {
+                labelIdsToDelete.push(rowId);
+              }
+            });
+
+            let insLErr: any = null;
+            if (labelsToInsert.length > 0) {
+              const res = await supabase.from('card_labels').upsert(labelsToInsert, { onConflict: 'card_id,label_id', ignoreDuplicates: true });
+              insLErr = res.error;
+              if (insLErr) console.warn('[SupabaseService] Label upsert warning:', insLErr);
+            }
+            if (!insLErr && labelIdsToDelete.length > 0) {
+              const { error: delLErr } = await supabase.from('card_labels').delete().in('id', labelIdsToDelete);
+              if (delLErr) console.warn('[SupabaseService] Label delete warning:', delLErr);
+            }
+          } else {
+            const fallbackLRows = Array.from(desiredLabelsMap.values());
+            if (fallbackLRows.length > 0) {
+              await supabase.from('card_labels').upsert(fallbackLRows, { onConflict: 'card_id,label_id' });
+            }
           }
         }
 

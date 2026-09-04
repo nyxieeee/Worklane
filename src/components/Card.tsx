@@ -6,7 +6,7 @@ import {
   Zap, BookOpen, Globe, Database, ShieldCheck, Layers
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { LABELS, type Card as CardType } from '../types';
+import { LABELS, type Card as CardType, type Member } from '../types';
 import { getDueStatus, formatDueDate, avatarInitials } from '../utils';
 import { useWorkStore } from '../store/useWorkStore';
 import { useSettingsStore } from '../store/useSettingsStore';
@@ -89,9 +89,11 @@ export default function Card({
 
   const allLabels = [...LABELS, ...customLabels];
   const labelHtml = (card.labels || []).map(lid => allLabels.find(l => l.id === lid)).filter(Boolean);
-  const assignees = (card.assignees || []).slice(0, 3)
-    .map(uid => (board?.members || []).find(m => m.id === uid))
-    .filter(Boolean);
+  const assignees = (card.assignees || [])
+    .map(uid => (board?.members || []).find(m =>
+      m.id === uid || (m.email && m.email.toLowerCase().trim() === uid.toLowerCase().trim())
+    ))
+    .filter(Boolean) as Member[];
 
   const isImageAttachment = (att: { type?: string; dataUrl?: string; name?: string }) => {
     return (
@@ -226,7 +228,7 @@ export default function Card({
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
           {assignees.length > 0 && (
             <div className="card-assignees">
-              {assignees.map(m => m && (
+              {assignees.slice(0, 3).map(m => m && (
                 <AvatarBorder key={m.id} borderStyle={m.borderStyle} size={22} title={m.name}>
                   {m.avatarUrl ? (
                     <img src={m.avatarUrl} alt={m.name} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />
@@ -237,6 +239,24 @@ export default function Card({
                   )}
                 </AvatarBorder>
               ))}
+              {assignees.length > 3 && (
+                <span
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    padding: '2px 4px',
+                    borderRadius: 6,
+                    backgroundColor: 'hsl(var(--secondary))',
+                    color: 'hsl(var(--muted-foreground))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  title={`${assignees.length - 3} more assignees`}
+                >
+                  +{assignees.length - 3}
+                </span>
+              )}
             </div>
           )}
           <button

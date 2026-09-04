@@ -1,9 +1,6 @@
 -- ==============================================================================
 -- WORKLANE - FRESH RESET & COMPLETE DATABASE SCHEMA
 -- ==============================================================================
--- Run this entire script in your Supabase SQL Editor:
--- https://app.supabase.com/project/_/sql/new
--- ==============================================================================
 
 -- 1. Enable required extensions
 create extension if not exists "uuid-ossp";

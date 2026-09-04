@@ -130,18 +130,20 @@ const recentlyRemovedEmails = new Map<string, number>(); // email -> timestamp m
 export function scheduleBoardSync(board: Board, delayMs = 60) {
   if (!board || !board.id) return;
 
-  const existing = syncTimers.get(board.id);
+  const boardId = board.id;
+  const existing = syncTimers.get(boardId);
   if (existing) clearTimeout(existing);
 
   const timer = window.setTimeout(async () => {
     try {
-      await supabaseService.syncBoard(board);
+      const freshBoard = useWorkStore.getState().boards.find(b => b.id === boardId) || board;
+      await supabaseService.syncBoard(freshBoard);
     } finally {
-      syncTimers.delete(board.id);
+      syncTimers.delete(boardId);
     }
   }, delayMs);
 
-  syncTimers.set(board.id, timer);
+  syncTimers.set(boardId, timer);
 }
 
 // ── Zustand Store (Cloud-Only, No localStorage) ─────────────────────────────
@@ -785,7 +787,7 @@ export const useWorkStore = create<WorkState>()(
 
           const currentUser = useAuthStore.getState().user;
           cardAssignees.forEach(mId => {
-            const member = tb.members?.find(m => m.id === mId);
+            const member = tb.members?.find(m => m.id === mId || (m.email && m.email.toLowerCase().trim() === mId.toLowerCase().trim()));
             if (member && member.email) {
               if (member.email.toLowerCase().trim() !== currentUser?.email?.toLowerCase().trim()) {
                 useNotifStore.getState().addNotification(
@@ -837,12 +839,15 @@ export const useWorkStore = create<WorkState>()(
         let targetBoard: Board | undefined;
         set(s => {
           const tb = s.boards.find(b =>
-            b.columns?.some(col => col.cards?.some(c => c.id === cardId))
+            b.columns?.some(col => col.cards?.some(c => c.id === cardId)) ||
+            (b.inboxCards || []).some(c => c.id === cardId)
           ) || s.boards.find(b => b.id === s.activeBoardId);
 
           if (!tb) return s;
 
-          const member = tb.members?.find(m => m.id === memberId);
+          const member = tb.members?.find(m =>
+            m.id === memberId || (m.email && m.email.toLowerCase().trim() === memberId.toLowerCase().trim())
+          );
           let assignedCardTitle = '';
           let isAssigning = false;
 
@@ -850,10 +855,15 @@ export const useWorkStore = create<WorkState>()(
             updateCardInBoard(b, cardId, c => {
               assignedCardTitle = c.title;
               const currentAssignees = c.assignees || [];
-              isAssigning = !currentAssignees.includes(memberId);
+              const matchesMember = (a: string) =>
+                a === memberId ||
+                (member && (a === member.id || (member.email && a.toLowerCase().trim() === member.email.toLowerCase().trim())));
+
+              isAssigning = !currentAssignees.some(matchesMember);
+              const canonicalId = member?.id || memberId;
               const assignees = isAssigning
-                ? [...currentAssignees, memberId]
-                : currentAssignees.filter(a => a !== memberId);
+                ? [...currentAssignees.filter(a => !matchesMember(a)), canonicalId]
+                : currentAssignees.filter(a => !matchesMember(a));
               
               return { ...c, assignees };
             })
@@ -993,7 +1003,7 @@ export const useWorkStore = create<WorkState>()(
           });
 
           cardAssignees.forEach(mId => {
-            const member = tb.members?.find(m => m.id === mId);
+            const member = tb.members?.find(m => m.id === mId || (m.email && m.email.toLowerCase().trim() === mId.toLowerCase().trim()));
             if (member && member.email) {
               const memEmail = member.email.toLowerCase().trim();
               const isAuthor = currentUser?.email && memEmail === currentUser.email.toLowerCase().trim();

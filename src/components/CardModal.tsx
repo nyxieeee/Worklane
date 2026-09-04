@@ -176,16 +176,11 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
         description: localDescription,
       });
 
-      const updatedBoard = {
-        ...board,
-        columns: (board.columns || []).map(col => ({
-          ...col,
-          cards: (col.cards || []).map(c => c.id === cardId ? { ...c, title: trimmedTitle, description: localDescription } : c),
-        })),
-        inboxCards: (board.inboxCards || []).map(c => c.id === cardId ? { ...c, title: trimmedTitle, description: localDescription } : c),
-      };
-
-      await supabaseService.syncBoard(updatedBoard);
+      // Retrieve the fresh, complete board state from the store to avoid stale closure overrides
+      const freshBoard = useWorkStore.getState().boards.find(b => b.id === board.id);
+      if (freshBoard) {
+        await supabaseService.syncBoard(freshBoard);
+      }
 
       setIsSaving(false);
       setIsSavedSuccess(true);
@@ -1551,7 +1546,9 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                     filteredAssigneeMembers.map(m => {
                       const isCurrent = currentUser?.email && m.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
                       const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
-                      const isAssigned = card.assignees?.includes(m.id);
+                      const isAssigned = card.assignees?.some(a =>
+                        a === m.id || (m.email && a.toLowerCase().trim() === m.email.toLowerCase().trim())
+                      );
                       const isMemberOwner = !!(board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim());
                       const badge = getTeamBadgeInfo(m.borderStyle);
 

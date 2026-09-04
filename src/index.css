@@ -983,6 +983,7 @@ html, body, #root {
 .glass-calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 106px;
   gap: 10px;
   flex: 1;
 }
@@ -990,15 +991,28 @@ html, body, #root {
 .glass-calendar-day {
   background-color: hsl(var(--card));
   box-shadow: var(--neu-shadow-raised-sm);
-  border-radius: 10px;
-  padding: 10px;
-  min-height: 120px;
+  border-radius: 12px;
+  padding: 8px 10px;
+  height: 106px;
+  min-height: 106px;
+  max-height: 106px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+}
+.glass-calendar-day:hover {
+  box-shadow: var(--neu-shadow-raised);
+  transform: translateY(-1px);
+  border-color: hsl(var(--primary) / 0.35);
 }
 .glass-calendar-day.is-today {
   box-shadow: var(--neu-shadow-pressed);
+  border-color: hsl(var(--primary) / 0.5);
 }
 
 /* ══ Dashboard View ════════════════════════════════════════ */

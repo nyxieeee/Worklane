@@ -10,8 +10,15 @@ import { useAuthStore } from '../store/useAuthStore';
 import Column from './Column';
 import { InboxDrawer } from './InboxDrawer';
 import { formatDueDate, avatarInitials } from '../utils';
-import { LABELS, type Member } from '../types';
+import { LABELS, type Member, type Card, type Column as ColumnType } from '../types';
 import { sortColumnsByWorkflow } from '../store/useWorkStore';
+
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 interface DragState {
   cardId: string;
@@ -68,6 +75,7 @@ export default function BoardArea({
   const [renameColId, setRenameColId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [showRenameModal, setShowRenameModal] = useState(false);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
 
   // Calendar navigation: tracks year+month offset from today
   const today = new Date();
@@ -462,12 +470,34 @@ export default function BoardArea({
               {calendarDays.map((d, i) => {
                 const isCurrentMonth = d.getMonth() === calendarMonth;
                 const isToday = d.toDateString() === today.toDateString();
-                const dateStr = d.toISOString().slice(0, 10);
+                const dateStr = formatLocalDate(d);
                 const dayCards = filteredColumns.flatMap(c => c.cards).filter(c => c.dueDate && c.dueDate.slice(0, 10) === dateStr);
 
                 return (
-                  <div key={i} className={`glass-calendar-day ${isToday ? 'is-today' : ''}`} style={{ opacity: isCurrentMonth ? 1 : 0.38 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 4 }}>
+                  <div
+                    key={i}
+                    className={`glass-calendar-day ${isToday ? 'is-today' : ''}`}
+                    style={{ opacity: isCurrentMonth ? 1 : 0.38 }}
+                    onClick={() => setSelectedCalendarDate(d)}
+                    title={`Click to view all tasks for ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      {dayCards.length > 0 ? (
+                        <span
+                          style={{
+                            fontSize: 9.5,
+                            fontWeight: 700,
+                            padding: '1px 5px',
+                            borderRadius: 999,
+                            backgroundColor: 'hsl(var(--primary) / 0.15)',
+                            color: 'hsl(var(--primary))',
+                            letterSpacing: '0.02em',
+                          }}
+                        >
+                          {dayCards.length} {dayCards.length === 1 ? 'task' : 'tasks'}
+                        </span>
+                      ) : <span />}
+
                       <span
                         style={{
                           fontSize: 11.5,
@@ -480,36 +510,56 @@ export default function BoardArea({
                           justifyContent: 'center',
                           backgroundColor: isToday ? 'hsl(var(--primary))' : 'transparent',
                           color: isToday ? 'hsl(var(--primary-foreground))' : 'hsl(var(--foreground))',
-                          boxShadow: isToday ? 'var(--neu-shadow-raised-sm)' : 'none'
+                          boxShadow: isToday ? 'var(--neu-shadow-raised-sm)' : 'none',
                         }}
                       >
                         {d.getDate()}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, overflowY: 'auto' }}>
-                      {dayCards.map(card => (
-                        <motion.div
+
+                    {/* Preview up to 2 tasks max - tightly bounded so it never stretches rows */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden' }}>
+                      {dayCards.slice(0, 2).map(card => (
+                        <div
                           key={card.id}
-                          whileHover={{ scale: 1.02, y: -1 }}
                           style={{
-                            padding: '4px 7px',
+                            padding: '3px 6px',
                             borderRadius: 6,
                             backgroundColor: 'hsl(var(--card))',
                             boxShadow: 'var(--neu-shadow-raised-sm)',
-                            fontSize: 11,
+                            fontSize: 10.5,
                             fontWeight: 500,
                             cursor: 'pointer',
+                            color: 'hsl(var(--foreground))',
                             textDecoration: card.completed ? 'line-through' : 'none',
                             opacity: card.completed ? 0.6 : 1,
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis'
+                            textOverflow: 'ellipsis',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
                           }}
-                          onClick={() => onOpenCard(card.id)}
                         >
-                          {card.title}
-                        </motion.div>
+                          <span
+                            style={{
+                              width: 5,
+                              height: 5,
+                              borderRadius: '50%',
+                              backgroundColor: card.completed ? '#10b981' : 'hsl(var(--primary))',
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {card.title}
+                          </span>
+                        </div>
                       ))}
+                      {dayCards.length > 2 && (
+                        <span style={{ fontSize: 9.5, fontWeight: 700, color: 'hsl(var(--primary))', paddingLeft: 2 }}>
+                          +{dayCards.length - 2} more...
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -625,6 +675,224 @@ export default function BoardArea({
                 <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary" onClick={() => setShowRenameModal(false)}>Cancel</motion.button>
                 <motion.button whileTap={{ scale: 0.95 }} className="btn btn-primary" onClick={handleRenameConfirm}>
                   <Check size={14} /> Rename
+                </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Day Tasks Modal */}
+      <AnimatePresence>
+        {selectedCalendarDate && (
+          <div className="modal-overlay" onClick={() => setSelectedCalendarDate(null)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="modal"
+              style={{ maxWidth: 540, width: '92vw', maxHeight: '82vh', display: 'flex', flexDirection: 'column' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="modal-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      backgroundColor: 'hsl(var(--primary) / 0.12)',
+                      color: 'hsl(var(--primary))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: 'var(--neu-shadow-raised-sm)',
+                    }}
+                  >
+                    <Calendar size={18} />
+                  </div>
+                  <div>
+                    <h2 className="modal-title" style={{ fontSize: 15, margin: 0 }}>
+                      {selectedCalendarDate.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+                    </h2>
+                    <span style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))' }}>
+                      {(() => {
+                        const dateStr = formatLocalDate(selectedCalendarDate);
+                        const count = filteredColumns.flatMap(c => c.cards).filter(c => c.dueDate && c.dueDate.slice(0, 10) === dateStr).length;
+                        return count === 0 ? 'No tasks scheduled' : `${count} task${count > 1 ? 's' : ''} scheduled`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+                <button className="icon-btn" onClick={() => setSelectedCalendarDate(null)}>
+                  <X size={15} />
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                {(() => {
+                  const dateStr = formatLocalDate(selectedCalendarDate);
+                  const matchingTasks: Array<{ card: Card; column: ColumnType }> = [];
+                  for (const col of filteredColumns) {
+                    for (const card of col.cards) {
+                      if (card.dueDate && card.dueDate.slice(0, 10) === dateStr) {
+                        matchingTasks.push({ card, column: col });
+                      }
+                    }
+                  }
+
+                  if (matchingTasks.length === 0) {
+                    return (
+                      <div style={{ padding: '36px 16px', textAlign: 'center', color: 'hsl(var(--muted-foreground))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                        <Calendar size={32} style={{ opacity: 0.35 }} />
+                        <span style={{ fontSize: 13, fontWeight: 500 }}>No tasks due on this date</span>
+                      </div>
+                    );
+                  }
+
+                  return matchingTasks.map(({ card, column }) => (
+                    <motion.div
+                      key={card.id}
+                      whileHover={{ scale: 1.01, y: -1 }}
+                      whileTap={{ scale: 0.99 }}
+                      onClick={() => {
+                        setSelectedCalendarDate(null);
+                        onOpenCard(card.id);
+                      }}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        backgroundColor: 'hsl(var(--card))',
+                        boxShadow: 'var(--neu-shadow-raised-sm)',
+                        border: '1px solid hsl(var(--border) / 0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        cursor: 'pointer',
+                        transition: 'box-shadow 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCardComplete(card.id);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: card.completed ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
+                            padding: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                          title={card.completed ? 'Mark incomplete' : 'Mark complete'}
+                        >
+                          {card.completed ? <CheckSquare size={17} /> : <Square size={17} />}
+                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0 }}>
+                          <span
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: 'hsl(var(--foreground))',
+                              textDecoration: card.completed ? 'line-through' : 'none',
+                              opacity: card.completed ? 0.65 : 1,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {card.title}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                backgroundColor: 'hsl(var(--secondary))',
+                                color: 'hsl(var(--muted-foreground))',
+                                letterSpacing: '0.03em',
+                                textTransform: 'uppercase',
+                              }}
+                            >
+                              {column.name}
+                            </span>
+                            {card.labels?.slice(0, 2).map(lId => {
+                              const label = LABELS.find(l => l.id === lId);
+                              if (!label) return null;
+                              return (
+                                <span
+                                  key={label.id}
+                                  style={{
+                                    fontSize: 9.5,
+                                    fontWeight: 700,
+                                    padding: '1px 5px',
+                                    borderRadius: 3,
+                                    backgroundColor: `${label.color}22`,
+                                    color: label.color,
+                                  }}
+                                >
+                                  {label.name}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {card.assignees?.length > 0 && (
+                          <div style={{ display: 'flex', marginLeft: -4 }}>
+                            {card.assignees.slice(0, 3).map((mId, idx) => {
+                              const m = board?.members?.find(mem => mem.id === mId || mem.email === mId);
+                              if (!m) return null;
+                              return (
+                                <div
+                                  key={m.id || idx}
+                                  style={{
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: '50%',
+                                    marginLeft: idx === 0 ? 0 : -6,
+                                    border: '1.5px solid hsl(var(--card))',
+                                    backgroundColor: m.color || '#6366f1',
+                                    color: '#fff',
+                                    fontSize: 8.5,
+                                    fontWeight: 700,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    overflow: 'hidden',
+                                  }}
+                                  title={m.name}
+                                >
+                                  {m.avatarUrl ? (
+                                    <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    avatarInitials(m.name)
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <ChevronRight size={15} style={{ color: 'hsl(var(--muted-foreground))' }} />
+                      </div>
+                    </motion.div>
+                  ));
+                })()}
+              </div>
+
+              <div className="modal-footer" style={{ justifyContent: 'flex-end', padding: '10px 18px' }}>
+                <motion.button whileTap={{ scale: 0.95 }} className="btn btn-secondary" onClick={() => setSelectedCalendarDate(null)}>
+                  Close
                 </motion.button>
               </div>
             </motion.div>

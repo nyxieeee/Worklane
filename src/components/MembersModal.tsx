@@ -70,6 +70,7 @@ export default function MembersModal({ onClose }: Props) {
   // Border style override state (owner can set any member's border)
   const [borderPickerMemberId, setBorderPickerMemberId] = useState<string | null>(null);
   const [pendingBorderStyle, setPendingBorderStyle] = useState<string>('none');
+  const [pendingMemberStyles, setPendingMemberStyles] = useState<Record<string, string>>({});
 
   // Team Filtering
   const [teamFilter, setTeamFilter] = useState<'all' | 'frontend' | 'backend' | 'work'>('all');
@@ -538,9 +539,10 @@ export default function MembersModal({ onClose }: Props) {
                   name={member.name}
                   avatarUrl={member.avatarUrl}
                   color={member.color}
-                  value={member.borderStyle || 'none'}
+                  value={pendingMemberStyles[member.id] !== undefined ? pendingMemberStyles[member.id] : (member.borderStyle || 'none')}
                   onChange={(newStyle) => {
                     setPendingBorderStyle(newStyle);
+                    setPendingMemberStyles(prev => ({ ...prev, [member.id]: newStyle }));
                     updateMember(member.id, { borderStyle: newStyle });
                     const preset = BORDER_PRESETS.find(p => p.key === newStyle);
                     const label = preset?.label || newStyle;

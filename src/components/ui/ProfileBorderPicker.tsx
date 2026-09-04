@@ -3,7 +3,7 @@
  * Professional live avatar preview + work-related border style swatches
  * and clean custom border & badge creator (no emojis).
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Check, Code2, Plus, Sparkles, Trash2, X, Briefcase
 } from 'lucide-react';
@@ -76,9 +76,48 @@ export default function ProfileBorderPicker({
   const [customColor, setCustomColor] = useState('#6366f1');
   const [customStyleType, setCustomStyleType] = useState<'gradient' | 'glow' | 'solid' | 'dashed'>('gradient');
 
-  // Active badge info
-  const badgeInfo = getTeamBadgeInfo(value);
-  const parsedCustom = parseCustomBorderStyle(value);
+  // Optimistic selection state with rubberband bounce rejection
+  const [selectedStyle, setSelectedStyle] = useState<string>(value || 'none');
+  const lastClickTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    // Only accept incoming value changes if user hasn't clicked in the last 2.5s (prevents cloud sync rubberbanding)
+    if (Date.now() - lastClickTimeRef.current > 2500) {
+      setSelectedStyle(value || 'none');
+    }
+  }, [value]);
+
+  const handleSelect = (key: string) => {
+    lastClickTimeRef.current = Date.now();
+    setSelectedStyle(key);
+    onChange(key);
+  };
+
+  // Live preview border style:
+  // If user is actively creating/editing in the Custom Roles & Badges panel,
+  // dynamically build the custom border from their current form inputs (color, style, labels)!
+  const livePreviewStyle = useMemo(() => {
+    if (isCreatingCustom) {
+      const trimmedLabel = customLabel.trim() || 'Custom Role';
+      const trimmedBadge = customBadge.trim() || (customLabel.trim() || 'ROLE').slice(0, 4).toUpperCase();
+      const previewDef: CustomBorderDef = {
+        id: 'temp_preview',
+        label: trimmedLabel,
+        badgeText: trimmedBadge,
+        color: customColor,
+        gradient: `linear-gradient(135deg, ${customColor}, #a855f7)`,
+        styleType: customStyleType,
+      };
+      return encodeCustomBorderStyle(previewDef);
+    }
+    return selectedStyle;
+  }, [isCreatingCustom, customLabel, customBadge, customColor, customStyleType, selectedStyle]);
+
+  const liveBadgeInfo = useMemo(() => {
+    return getTeamBadgeInfo(livePreviewStyle);
+  }, [livePreviewStyle]);
+
+  const parsedCustom = parseCustomBorderStyle(selectedStyle);
 
   const avatarContent = avatarUrl ? (
     <img src={avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
@@ -110,7 +149,7 @@ export default function ProfileBorderPicker({
     saveCustomBorder(newBorder);
     setCustomBorders(getCustomBorders());
     const encoded = encodeCustomBorderStyle(newBorder);
-    onChange(encoded);
+    handleSelect(encoded);
     setIsCreatingCustom(false);
     setCustomLabel('');
     setCustomBadge('');
@@ -121,8 +160,8 @@ export default function ProfileBorderPicker({
     deleteCustomBorder(id);
     const updated = getCustomBorders();
     setCustomBorders(updated);
-    if (value.includes(id)) {
-      onChange('none');
+    if (selectedStyle.includes(id)) {
+      handleSelect('none');
     }
   };
 
@@ -139,28 +178,47 @@ export default function ProfileBorderPicker({
         alignItems: 'center',
         gap: 16,
       }}>
-        <AvatarBorder borderStyle={value} size={64}>
+        <AvatarBorder borderStyle={livePreviewStyle} size={64}>
           {avatarContent}
         </AvatarBorder>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--foreground))' }}>{name || 'Member'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--foreground))' }}>{name || 'Member'}</div>
+            {isCreatingCustom && (
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: customColor,
+                backgroundColor: `${customColor}18`,
+                padding: '1.5px 8px',
+                borderRadius: 9999,
+                border: `1px solid ${customColor}40`,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: customColor }} />
+                Live Preview
+              </span>
+            )}
+          </div>
           
-          {badgeInfo ? (
+          {liveBadgeInfo ? (
             <div style={{
               marginTop: 6,
               display: 'inline-flex',
               alignItems: 'center',
               padding: '2.5px 10px',
               borderRadius: 9999,
-              background: badgeInfo.bg,
-              color: badgeInfo.color,
-              border: `1px solid ${badgeInfo.color}40`,
+              background: liveBadgeInfo.bg,
+              color: liveBadgeInfo.color,
+              border: `1px solid ${liveBadgeInfo.color}40`,
               fontSize: 11,
               fontWeight: 700,
               letterSpacing: '0.02em',
               boxShadow: 'var(--neu-shadow-raised-sm)'
             }}>
-              <span>{badgeInfo.label}</span>
+              <span>{liveBadgeInfo.label}</span>
             </div>
           ) : (
             <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', marginTop: 3 }}>
@@ -223,17 +281,28 @@ export default function ProfileBorderPicker({
                 overflow: 'hidden'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--foreground))' }}>
-                  Design Custom Role, Border & Badge
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <AvatarBorder borderStyle={livePreviewStyle} size={38}>
+                    {avatarContent}
+                  </AvatarBorder>
+                  <div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--foreground))', display: 'block' }}>
+                      Design Custom Role, Border & Badge
+                    </span>
+                    <span style={{ fontSize: 10.5, color: 'hsl(var(--muted-foreground))' }}>
+                      Changes preview live on avatar above
+                    </span>
+                  </div>
+                </div>
                 {/* Mini Preview */}
                 <div style={{
                   display: 'inline-flex', alignItems: 'center',
                   padding: '2.5px 9px', borderRadius: 9999,
                   background: `${customColor}22`, color: customColor,
                   border: `1px solid ${customColor}50`,
-                  fontSize: 10.5, fontWeight: 700, letterSpacing: '0.02em'
+                  fontSize: 10.5, fontWeight: 700, letterSpacing: '0.02em',
+                  flexShrink: 0
                 }}>
                   <span>{customLabel.trim() || 'Role'} ({customBadge.trim() || 'TAG'})</span>
                 </div>
@@ -351,13 +420,13 @@ export default function ProfileBorderPicker({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
             {customBorders.map(cb => {
               const encoded = encodeCustomBorderStyle(cb);
-              const isSelected = value === encoded || (parsedCustom && parsedCustom.id === cb.id);
+              const isSelected = selectedStyle === encoded || (parsedCustom && parsedCustom.id === cb.id);
               return (
                 <motion.div
                   key={cb.id}
                   whileTap={{ scale: 0.93 }}
                   whileHover={{ scale: 1.03 }}
-                  onClick={() => onChange(encoded)}
+                  onClick={() => handleSelect(encoded)}
                   title={`${cb.label} (${cb.badgeText})`}
                   style={{
                     border: isSelected ? `1.5px solid ${cb.color}` : '1px solid hsl(var(--border) / 0.6)',
@@ -437,14 +506,14 @@ export default function ProfileBorderPicker({
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           {techPresets.map(preset => {
-            const isSelected = value === preset.key;
+            const isSelected = selectedStyle === preset.key;
             return (
               <motion.button
                 key={preset.key}
                 whileTap={{ scale: 0.93 }}
                 whileHover={{ scale: 1.04 }}
                 type="button"
-                onClick={() => onChange(preset.key)}
+                onClick={() => handleSelect(preset.key)}
                 title={preset.label}
                 style={{
                   border: isSelected ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
@@ -497,14 +566,14 @@ export default function ProfileBorderPicker({
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           {workPresets.map(preset => {
-            const isSelected = value === preset.key;
+            const isSelected = selectedStyle === preset.key;
             return (
               <motion.button
                 key={preset.key}
                 whileTap={{ scale: 0.93 }}
                 whileHover={{ scale: 1.04 }}
                 type="button"
-                onClick={() => onChange(preset.key)}
+                onClick={() => handleSelect(preset.key)}
                 title={preset.label}
                 style={{
                   border: isSelected ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
@@ -548,14 +617,14 @@ export default function ProfileBorderPicker({
             whileTap={{ scale: 0.93 }}
             whileHover={{ scale: 1.04 }}
             type="button"
-            onClick={() => onChange(nonePreset.key)}
+            onClick={() => handleSelect(nonePreset.key)}
             title={nonePreset.label}
             style={{
-              border: value === 'none' || !value ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
+              border: selectedStyle === 'none' || !selectedStyle ? '1.5px solid hsl(var(--primary))' : '1px solid hsl(var(--border) / 0.6)',
               borderRadius: 10,
               padding: '8px 6px',
-              backgroundColor: value === 'none' || !value ? 'hsl(var(--primary) / 0.08)' : 'hsl(var(--card))',
-              boxShadow: value === 'none' || !value ? 'var(--neu-shadow-raised-sm)' : 'var(--neu-shadow-input)',
+              backgroundColor: selectedStyle === 'none' || !selectedStyle ? 'hsl(var(--primary) / 0.08)' : 'hsl(var(--card))',
+              boxShadow: selectedStyle === 'none' || !selectedStyle ? 'var(--neu-shadow-raised-sm)' : 'var(--neu-shadow-input)',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
@@ -565,7 +634,7 @@ export default function ProfileBorderPicker({
               position: 'relative',
             }}
           >
-            {(value === 'none' || !value) && (
+            {(selectedStyle === 'none' || !selectedStyle) && (
               <div style={{
                 position: 'absolute', top: 3, right: 3,
                 width: 14, height: 14, borderRadius: '50%',
@@ -578,7 +647,7 @@ export default function ProfileBorderPicker({
             <SwatchPreview preset={nonePreset} size={22} />
             <span style={{
               fontSize: 9.5, fontWeight: 600, lineHeight: 1.2, textAlign: 'center',
-              color: value === 'none' || !value ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
+              color: selectedStyle === 'none' || !selectedStyle ? 'hsl(var(--primary))' : 'hsl(var(--foreground))',
             }}>
               {nonePreset.label}
             </span>

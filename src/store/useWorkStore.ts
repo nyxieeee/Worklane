@@ -127,6 +127,7 @@ function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => C
 const syncTimers = new Map<string, number>();
 const recentlyRemovedEmails = new Map<string, number>(); // email -> timestamp ms
 const recentlyAddedMembers = new Map<string, number>(); // email -> timestamp ms
+const recentlyUpdatedMemberStyles = new Map<string, { borderStyle: string; timestamp: number }>(); // id or email -> { borderStyle, timestamp }
 
 export function scheduleBoardSync(board: Board, delayMs = 60) {
   if (!board || !board.id) return;
@@ -181,22 +182,41 @@ export const useWorkStore = create<WorkState>()(
             for (const [em, t] of recentlyAddedMembers.entries()) {
               if (now - t > 6000) recentlyAddedMembers.delete(em);
             }
+            for (const [key, val] of recentlyUpdatedMemberStyles.entries()) {
+              if (now - val.timestamp > 6000) recentlyUpdatedMemberStyles.delete(key);
+            }
 
             const finalBoards = cloudBoards.map(cb => {
               const memBoard = s.boards.find(lb => lb.id === cb.id);
               if (!memBoard) {
                 const cleanMembers = (cb.members || []).filter(
                   m => !m.email || !recentlyRemovedEmails.has(m.email.toLowerCase().trim())
-                );
+                ).map(m => {
+                  const recentById = recentlyUpdatedMemberStyles.get(m.id);
+                  const recentByEmail = m.email ? recentlyUpdatedMemberStyles.get(m.email.toLowerCase().trim()) : undefined;
+                  const recent = recentById || recentByEmail;
+                  if (recent && now - recent.timestamp < 6000) {
+                    return { ...m, borderStyle: recent.borderStyle };
+                  }
+                  return m;
+                });
                 return { ...cb, members: cleanMembers };
               }
 
               const hasPendingSync = syncTimers.has(cb.id);
 
-              // Filter out recently removed members
+              // Filter out recently removed members and preserve optimistic border styles
               const cloudMembersFiltered = (cb.members || []).filter(
                 m => !m.email || !recentlyRemovedEmails.has(m.email.toLowerCase().trim())
-              );
+              ).map(m => {
+                const recentById = recentlyUpdatedMemberStyles.get(m.id);
+                const recentByEmail = m.email ? recentlyUpdatedMemberStyles.get(m.email.toLowerCase().trim()) : undefined;
+                const recent = recentById || recentByEmail;
+                if (recent && now - recent.timestamp < 6000) {
+                  return { ...m, borderStyle: recent.borderStyle };
+                }
+                return m;
+              });
 
               // ONLY preserve locally added members if this client explicitly added them in the last 6s and cloud hasn't returned them yet
               const cloudEmails = new Set(cloudMembersFiltered.map(m => (m.email || '').toLowerCase().trim()).filter(Boolean));
@@ -1149,6 +1169,10 @@ export const useWorkStore = create<WorkState>()(
         if (targetBoard) {
           scheduleBoardSync(targetBoard, 50);
           if (updatedMember?.borderStyle !== undefined) {
+            recentlyUpdatedMemberStyles.set(memberId, { borderStyle: updatedMember.borderStyle, timestamp: Date.now() });
+            if (updatedMember.email) {
+              recentlyUpdatedMemberStyles.set(updatedMember.email.toLowerCase().trim(), { borderStyle: updatedMember.borderStyle, timestamp: Date.now() });
+            }
             supabaseService.updateMemberBorderStyle(targetBoard.id, memberId, updatedMember.borderStyle, updatedMember.email);
           }
         }

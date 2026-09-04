@@ -102,7 +102,7 @@ function buildWorklaneEmailHtml({
                         </td>
                         <td style="padding-left: 12px; vertical-align: middle;">
                           <div style="font-size: 17px; font-weight: 800; color: #0f172a; letter-spacing: -0.03em; line-height: 1.15;">Worklane</div>
-                          <div style="font-size: 10px; font-weight: 700; color: #64748b; letter-spacing: 0.05em; margin-top: 2px; text-transform: uppercase;">Kanban Workspace</div>
+                          <div style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: -0.01em; margin-top: 2px;">Simply get things done.</div>
                         </td>
                       </tr>
                     </table>

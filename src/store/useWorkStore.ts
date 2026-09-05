@@ -125,23 +125,35 @@ function updateCardInBoard(board: Board, cardId: string, updater: (c: Card) => C
 }
 
 const syncTimers = new Map<string, number>();
+const activeSyncBoards = new Set<string>();
+const lastLocalMutationTimes = new Map<string, number>(); // boardId -> timestamp ms
 const recentlyRemovedEmails = new Map<string, number>(); // email -> timestamp ms
 const recentlyAddedMembers = new Map<string, number>(); // email -> timestamp ms
 const recentlyUpdatedMemberStyles = new Map<string, { borderStyle: string; timestamp: number }>(); // id or email -> { borderStyle, timestamp }
+
+export function markLocalBoardMutation(boardId: string) {
+  if (!boardId) return;
+  lastLocalMutationTimes.set(boardId, Date.now());
+}
 
 export function scheduleBoardSync(board: Board, delayMs = 60) {
   if (!board || !board.id) return;
 
   const boardId = board.id;
+  markLocalBoardMutation(boardId);
+
   const existing = syncTimers.get(boardId);
   if (existing) clearTimeout(existing);
 
   const timer = window.setTimeout(async () => {
+    syncTimers.delete(boardId);
+    activeSyncBoards.add(boardId);
     try {
       const freshBoard = useWorkStore.getState().boards.find(b => b.id === boardId) || board;
       await supabaseService.syncBoard(freshBoard);
     } finally {
-      syncTimers.delete(boardId);
+      activeSyncBoards.delete(boardId);
+      markLocalBoardMutation(boardId);
     }
   }, delayMs);
 
@@ -185,6 +197,9 @@ export const useWorkStore = create<WorkState>()(
             for (const [key, val] of recentlyUpdatedMemberStyles.entries()) {
               if (now - val.timestamp > 6000) recentlyUpdatedMemberStyles.delete(key);
             }
+            for (const [bId, t] of lastLocalMutationTimes.entries()) {
+              if (now - t > 10000) lastLocalMutationTimes.delete(bId);
+            }
 
             const finalBoards = cloudBoards.map(cb => {
               const memBoard = s.boards.find(lb => lb.id === cb.id);
@@ -204,6 +219,9 @@ export const useWorkStore = create<WorkState>()(
               }
 
               const hasPendingSync = syncTimers.has(cb.id);
+              const isActivelySyncing = activeSyncBoards.has(cb.id);
+              const lastEdit = lastLocalMutationTimes.get(cb.id) || 0;
+              const isRecentLocalEdit = (now - lastEdit) < 3000;
 
               // Filter out recently removed members and preserve optimistic border styles
               const cloudMembersFiltered = (cb.members || []).filter(
@@ -229,9 +247,13 @@ export const useWorkStore = create<WorkState>()(
                 cb.createdBy
               );
 
-              if (hasPendingSync) {
+              if (hasPendingSync || isActivelySyncing || isRecentLocalEdit) {
                 return {
-                  ...memBoard,
+                  ...cb,
+                  name: memBoard.name,
+                  color: memBoard.color,
+                  columns: memBoard.columns,
+                  inboxCards: memBoard.inboxCards,
                   members: memBoard.members?.length ? memBoard.members : mergedMembers,
                 };
               }
@@ -244,7 +266,7 @@ export const useWorkStore = create<WorkState>()(
 
             // Include newly created boards that haven't propagated to cloud yet
             s.boards.forEach(lb => {
-              const hasPendingSync = syncTimers.has(lb.id);
+              const hasPendingSync = syncTimers.has(lb.id) || activeSyncBoards.has(lb.id);
               if (hasPendingSync && !finalBoards.some(b => b.id === lb.id)) {
                 finalBoards.push(lb);
               }

@@ -143,7 +143,7 @@ export default function App() {
         if (boardsDebounceTimer) clearTimeout(boardsDebounceTimer);
         boardsDebounceTimer = window.setTimeout(() => {
           loadBoardsFromCloud(email);
-        }, 80);
+        }, 350);
       },
       () => {
         loadNotificationsFromCloud(email);

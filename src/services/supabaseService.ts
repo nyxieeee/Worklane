@@ -5,6 +5,10 @@ import { uid, sortMembersWithOwnerFirst } from '../utils';
 // Active WebSocket channel reference for instant peer broadcasting
 let activeRealtimeChannel: any = null;
 
+// Unique client instance ID to avoid self-broadcast reload loops
+export const CLIENT_INSTANCE_ID = 'cli_' + Math.random().toString(36).slice(2, 11) + '_' + Date.now();
+
+
 /**
  * Service to interact with Supabase database, storage, and notifications
  */
@@ -539,7 +543,7 @@ export const supabaseService = {
   async broadcastUpdate(event: 'boards' | 'notifications' | 'labels', meta?: any) {
     if (!isSupabaseConfigured()) return;
     try {
-      const payload = { ...meta, timestamp: Date.now() };
+      const payload = { ...meta, senderId: CLIENT_INSTANCE_ID, timestamp: Date.now() };
       if (activeRealtimeChannel) {
         try {
           await activeRealtimeChannel.send({
@@ -1397,7 +1401,10 @@ export const supabaseService = {
 
     // 1. Instant Peer-to-Peer Broadcast (sub-50ms sync between open windows/devices)
     channel
-      .on('broadcast', { event: 'boards' }, () => {
+      .on('broadcast', { event: 'boards' }, (payload) => {
+        if (payload?.payload?.senderId === CLIENT_INSTANCE_ID) {
+          return; // Ignore self-broadcast to prevent reloading boards we just saved
+        }
         onBoardsChange();
       })
       .on('broadcast', { event: 'notifications' }, (payload) => {
@@ -1406,7 +1413,10 @@ export const supabaseService = {
           onNotifsChange();
         }
       })
-      .on('broadcast', { event: 'labels' }, () => {
+      .on('broadcast', { event: 'labels' }, (payload) => {
+        if (payload?.payload?.senderId === CLIENT_INSTANCE_ID) {
+          return;
+        }
         if (onLabelsChange) onLabelsChange();
         else onBoardsChange();
       });

@@ -805,7 +805,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
         </div>
 
         {/* Modal Body: 2 Columns */}
-        <div className="modal-body card-modal-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 290px', gap: 28, padding: '20px 28px 28px 28px', overflowX: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+        <div className="modal-body card-modal-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 310px', gap: 28, padding: '20px 28px 28px 28px', overflowX: 'hidden', width: '100%', boxSizing: 'border-box' }}>
           {/* Main Area */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0, width: '100%', overflow: 'hidden' }}>
             {/* Title Field */}
@@ -1805,7 +1805,6 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                             return (
                               <motion.button
                                 key={m.id}
-                                layout
                                 whileTap={{ scale: 0.98 }}
                                 whileHover={{ scale: 1.01 }}
                                 transition={{ type: 'spring', stiffness: 500, damping: 30 }}
@@ -1813,21 +1812,23 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
+                                  justifyContent: 'space-between',
                                   gap: 8,
                                   width: '100%',
-                                  padding: '7px 9px',
+                                  padding: '6px 9px',
                                   borderRadius: 9,
                                   fontSize: 12,
                                   cursor: 'pointer',
                                   textAlign: 'left',
+                                  boxSizing: 'border-box',
                                   border: isAssigned
-                                    ? '1.5px solid hsl(var(--primary))'
+                                    ? '1.5px solid #f59e0b'
                                     : '1px solid hsl(var(--border) / 0.55)',
                                   backgroundColor: isAssigned
-                                    ? 'hsl(var(--primary) / 0.12)'
+                                    ? 'rgba(245, 158, 11, 0.12)'
                                     : 'hsl(var(--card))',
                                   boxShadow: isAssigned
-                                    ? '0 2px 8px hsl(var(--primary) / 0.2), var(--neu-shadow-raised-sm)'
+                                    ? '0 2px 8px rgba(245, 158, 11, 0.22), var(--neu-shadow-raised-sm)'
                                     : 'var(--neu-shadow-raised-sm)',
                                   color: isAssigned
                                     ? 'hsl(var(--foreground))'
@@ -1837,52 +1838,61 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                 }}
                                 onClick={() => toggleCardAssignee(cardId, m.id)}
                               >
-                                <AvatarBorder borderStyle={m.borderStyle} size={22}>
-                                  {m.avatarUrl ? (
-                                    <img src={m.avatarUrl} alt={displayName} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />
-                                  ) : (
-                                    <div style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      {avatarInitials(displayName)}
-                                    </div>
-                                  )}
-                                </AvatarBorder>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                                  <AvatarBorder borderStyle={m.borderStyle} size={22}>
+                                    {m.avatarUrl ? (
+                                      <img src={m.avatarUrl} alt={displayName} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />
+                                    ) : (
+                                      <div style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {avatarInitials(displayName)}
+                                      </div>
+                                    )}
+                                  </AvatarBorder>
 
-                                <span style={{
-                                  flex: 1,
-                                  textAlign: 'left',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  color: isAssigned ? 'hsl(var(--foreground))' : undefined,
-                                  fontWeight: isAssigned ? 600 : 500
-                                }}>
-                                  {displayName}
-                                </span>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                                    <span style={{
+                                      textAlign: 'left',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                      color: isAssigned ? 'hsl(var(--foreground))' : undefined,
+                                      fontWeight: isAssigned ? 600 : 500,
+                                      fontSize: 12,
+                                      lineHeight: 1.2
+                                    }}>
+                                      {displayName}
+                                    </span>
 
-                                {/* Team Badge */}
-                                {badge && (
-                                  <span style={{
-                                    fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                                    background: badge.bg, color: badge.color,
-                                    display: 'inline-flex', alignItems: 'center', flexShrink: 0
-                                  }}>
-                                    <span>{badge.label}</span>
-                                  </span>
-                                )}
+                                    {(badge || isMemberOwner || m.role === 'admin' || m.role === 'observer') && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 3.5, flexWrap: 'wrap', minWidth: 0 }}>
+                                        {badge && (
+                                          <span style={{
+                                            fontSize: 8.5, fontWeight: 700, padding: '0.5px 4.5px', borderRadius: 4,
+                                            background: badge.bg, color: badge.color,
+                                            display: 'inline-flex', alignItems: 'center', flexShrink: 0,
+                                            whiteSpace: 'nowrap'
+                                          }}>
+                                            <span>{badge.label}</span>
+                                          </span>
+                                        )}
 
-                                {isMemberOwner ? (
-                                  <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                                    <Crown size={10} /> Owner
-                                  </span>
-                                ) : m.role === 'admin' ? (
-                                  <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                                    <Shield size={10} /> Admin
-                                  </span>
-                                ) : m.role === 'observer' ? (
-                                  <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                                    <Eye size={10} /> Observer
-                                  </span>
-                                ) : null}
+                                        {isMemberOwner ? (
+                                          <span style={{ fontSize: 8.5, fontWeight: 700, padding: '0.5px 4.5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 2.5, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                            <Crown size={9} /> Owner
+                                          </span>
+                                        ) : m.role === 'admin' ? (
+                                          <span style={{ fontSize: 8.5, fontWeight: 700, padding: '0.5px 4.5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 2.5, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                            <Shield size={9} /> Admin
+                                          </span>
+                                        ) : m.role === 'observer' ? (
+                                          <span style={{ fontSize: 8.5, fontWeight: 700, padding: '0.5px 4.5px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 2.5, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                            <Eye size={9} /> Observer
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
 
                                 {/* Prominent Visual Indicator */}
                                 {isAssigned ? (
@@ -1892,12 +1902,13 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                     gap: 3.5,
                                     fontSize: 10,
                                     fontWeight: 700,
-                                    padding: '2px 7px',
+                                    padding: '2.5px 7px',
                                     borderRadius: 6,
-                                    backgroundColor: 'hsl(var(--primary))',
+                                    backgroundColor: '#f59e0b',
                                     color: '#ffffff',
-                                    boxShadow: '0 1px 4px hsl(var(--primary) / 0.35)',
-                                    flexShrink: 0
+                                    boxShadow: '0 1px 4px rgba(245, 158, 11, 0.4)',
+                                    flexShrink: 0,
+                                    whiteSpace: 'nowrap'
                                   }}>
                                     <Check size={11} strokeWidth={3} />
                                     <span>Assigned</span>
@@ -1909,11 +1920,12 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                     gap: 3,
                                     fontSize: 10,
                                     fontWeight: 600,
-                                    padding: '2px 6px',
+                                    padding: '2.5px 6px',
                                     borderRadius: 6,
                                     border: '1px dashed hsl(var(--muted-foreground) / 0.35)',
                                     color: 'hsl(var(--muted-foreground))',
-                                    flexShrink: 0
+                                    flexShrink: 0,
+                                    whiteSpace: 'nowrap'
                                   }}>
                                     <Plus size={10} strokeWidth={2.5} />
                                     <span>Assign</span>
@@ -1936,7 +1948,7 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                                     fontWeight: 700,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
-                                    color: 'hsl(var(--primary))',
+                                    color: '#d97706',
                                     padding: '2px 4px'
                                   }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -2022,40 +2034,63 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                             background: 'hsl(var(--card))',
                             boxShadow: 'var(--neu-shadow-raised-sm)',
                             border: '1px solid hsl(var(--border) / 0.5)',
+                            boxSizing: 'border-box',
+                            width: '100%',
+                            minWidth: 0,
                           }}
                         >
-                          <AvatarBorder borderStyle={m.borderStyle} size={20}>
+                          <AvatarBorder borderStyle={m.borderStyle} size={22}>
                             {m.avatarUrl ? (
-                              <img src={m.avatarUrl} alt={m.name} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
+                              <img src={m.avatarUrl} alt={m.name} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />
                             ) : (
-                              <div style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <div style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 {avatarInitials(m.name)}
                               </div>
                             )}
                           </AvatarBorder>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--foreground))', flex: 1 }}>{m.name}</span>
-                          {badge && (
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1, overflow: 'hidden' }}>
                             <span style={{
-                              fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                              background: badge.bg, color: badge.color,
-                              display: 'inline-flex', alignItems: 'center'
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: 'hsl(var(--foreground))',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              lineHeight: 1.2
                             }}>
-                              <span>{badge.label}</span>
+                              {m.name}
                             </span>
-                          )}
-                          {isMemOwner ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              <Crown size={10} /> Owner
-                            </span>
-                          ) : m.role === 'admin' ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              <Shield size={10} /> Admin
-                            </span>
-                          ) : m.role === 'observer' ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              <Eye size={10} /> Observer
-                            </span>
-                          ) : null}
+
+                            {(badge || isMemOwner || m.role === 'admin' || m.role === 'observer') && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 3.5, flexWrap: 'wrap', minWidth: 0 }}>
+                                {badge && (
+                                  <span style={{
+                                    fontSize: 8.5, fontWeight: 700, padding: '0.5px 4.5px', borderRadius: 4,
+                                    background: badge.bg, color: badge.color,
+                                    display: 'inline-flex', alignItems: 'center', flexShrink: 0,
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    <span>{badge.label}</span>
+                                  </span>
+                                )}
+
+                                {isMemOwner ? (
+                                  <span style={{ fontSize: 8.5, fontWeight: 700, padding: '0.5px 4.5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 2.5, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                    <Crown size={9} /> Owner
+                                  </span>
+                                ) : m.role === 'admin' ? (
+                                  <span style={{ fontSize: 8.5, fontWeight: 700, padding: '0.5px 4.5px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 2.5, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                    <Shield size={9} /> Admin
+                                  </span>
+                                ) : m.role === 'observer' ? (
+                                  <span style={{ fontSize: 8.5, fontWeight: 700, padding: '0.5px 4.5px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 2.5, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                    <Eye size={9} /> Observer
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })

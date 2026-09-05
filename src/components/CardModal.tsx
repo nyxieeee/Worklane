@@ -1774,72 +1774,228 @@ export default function CardModal({ cardId, boardId, onClose }: Props) {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -6 }}
                       transition={{ duration: 0.14, ease: 'easeOut' }}
-                      style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+                      style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
                     >
                       {filteredAssigneeMembers.length === 0 ? (
                         <div style={{ fontSize: 11.5, color: 'hsl(var(--muted-foreground))', padding: '8px 4px' }}>
                           No {assigneeTeamFilter} team members found.
                         </div>
                       ) : (
-                    filteredAssigneeMembers.map(m => {
-                      const isCurrent = currentUser?.email && m.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-                      const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
-                      const isAssigned = card.assignees?.some(a =>
-                        a === m.id || (m.email && a.toLowerCase().trim() === m.email.toLowerCase().trim())
-                      );
-                      const isMemberOwner = !!(board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim());
-                      const badge = getTeamBadgeInfo(m.borderStyle);
+                        (() => {
+                          const assignedList: Member[] = [];
+                          const unassignedList: Member[] = [];
 
-                      return (
-                        <motion.button
-                          whileTap={{ scale: 0.97 }}
-                          key={m.id}
-                          className={`sidebar-nav-item ${isAssigned ? 'active' : ''}`}
-                          style={{ padding: '6px 8px', fontSize: 12, gap: 8 }}
-                          onClick={() => toggleCardAssignee(cardId, m.id)}
-                        >
-                          <AvatarBorder borderStyle={m.borderStyle} size={20}>
-                            {m.avatarUrl ? (
-                              <img src={m.avatarUrl} alt={displayName} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover' }} />
-                            ) : (
-                              <div style={{ width: 20, height: 20, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {avatarInitials(displayName)}
+                          filteredAssigneeMembers.forEach(m => {
+                            const isAssigned = card.assignees?.some(a =>
+                              a === m.id || (m.email && a.toLowerCase().trim() === m.email.toLowerCase().trim())
+                            );
+                            if (isAssigned) {
+                              assignedList.push(m);
+                            } else {
+                              unassignedList.push(m);
+                            }
+                          });
+
+                          const renderAssigneeRow = (m: Member, isAssigned: boolean) => {
+                            const isCurrent = currentUser?.email && m.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+                            const displayName = (isCurrent && currentUser?.name) ? currentUser.name : m.name;
+                            const isMemberOwner = !!(board.createdBy && m.email && board.createdBy.toLowerCase().trim() === m.email.toLowerCase().trim());
+                            const badge = getTeamBadgeInfo(m.borderStyle);
+
+                            return (
+                              <motion.button
+                                key={m.id}
+                                layout
+                                whileTap={{ scale: 0.98 }}
+                                whileHover={{ scale: 1.01 }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                                type="button"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  width: '100%',
+                                  padding: '7px 9px',
+                                  borderRadius: 9,
+                                  fontSize: 12,
+                                  cursor: 'pointer',
+                                  textAlign: 'left',
+                                  border: isAssigned
+                                    ? '1.5px solid hsl(var(--primary))'
+                                    : '1px solid hsl(var(--border) / 0.55)',
+                                  backgroundColor: isAssigned
+                                    ? 'hsl(var(--primary) / 0.12)'
+                                    : 'hsl(var(--card))',
+                                  boxShadow: isAssigned
+                                    ? '0 2px 8px hsl(var(--primary) / 0.2), var(--neu-shadow-raised-sm)'
+                                    : 'var(--neu-shadow-raised-sm)',
+                                  color: isAssigned
+                                    ? 'hsl(var(--foreground))'
+                                    : 'hsl(var(--muted-foreground))',
+                                  fontWeight: isAssigned ? 600 : 500,
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onClick={() => toggleCardAssignee(cardId, m.id)}
+                              >
+                                <AvatarBorder borderStyle={m.borderStyle} size={22}>
+                                  {m.avatarUrl ? (
+                                    <img src={m.avatarUrl} alt={displayName} style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <div style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: m.color, color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      {avatarInitials(displayName)}
+                                    </div>
+                                  )}
+                                </AvatarBorder>
+
+                                <span style={{
+                                  flex: 1,
+                                  textAlign: 'left',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  color: isAssigned ? 'hsl(var(--foreground))' : undefined,
+                                  fontWeight: isAssigned ? 600 : 500
+                                }}>
+                                  {displayName}
+                                </span>
+
+                                {/* Team Badge */}
+                                {badge && (
+                                  <span style={{
+                                    fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+                                    background: badge.bg, color: badge.color,
+                                    display: 'inline-flex', alignItems: 'center', flexShrink: 0
+                                  }}>
+                                    <span>{badge.label}</span>
+                                  </span>
+                                )}
+
+                                {isMemberOwner ? (
+                                  <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                                    <Crown size={10} /> Owner
+                                  </span>
+                                ) : m.role === 'admin' ? (
+                                  <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                                    <Shield size={10} /> Admin
+                                  </span>
+                                ) : m.role === 'observer' ? (
+                                  <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                                    <Eye size={10} /> Observer
+                                  </span>
+                                ) : null}
+
+                                {/* Prominent Visual Indicator */}
+                                {isAssigned ? (
+                                  <div style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3.5,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    padding: '2px 7px',
+                                    borderRadius: 6,
+                                    backgroundColor: 'hsl(var(--primary))',
+                                    color: '#ffffff',
+                                    boxShadow: '0 1px 4px hsl(var(--primary) / 0.35)',
+                                    flexShrink: 0
+                                  }}>
+                                    <Check size={11} strokeWidth={3} />
+                                    <span>Assigned</span>
+                                  </div>
+                                ) : (
+                                  <div style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    padding: '2px 6px',
+                                    borderRadius: 6,
+                                    border: '1px dashed hsl(var(--muted-foreground) / 0.35)',
+                                    color: 'hsl(var(--muted-foreground))',
+                                    flexShrink: 0
+                                  }}>
+                                    <Plus size={10} strokeWidth={2.5} />
+                                    <span>Assign</span>
+                                  </div>
+                                )}
+                              </motion.button>
+                            );
+                          };
+
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {/* Group 1: Assigned (Always on top) */}
+                              {assignedList.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.05em',
+                                    color: 'hsl(var(--primary))',
+                                    padding: '2px 4px'
+                                  }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                      <CheckSquare size={11} /> Assigned ({assignedList.length})
+                                    </span>
+                                    <span style={{ fontSize: 9.5, opacity: 0.75, textTransform: 'none', fontWeight: 500 }}>
+                                      Click to unassign
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {assignedList.map(m => renderAssigneeRow(m, true))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Group 2: Available / Not Assigned */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.05em',
+                                  color: 'hsl(var(--muted-foreground))',
+                                  padding: '2px 4px',
+                                  marginTop: assignedList.length > 0 ? 4 : 0
+                                }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Users size={11} /> Not Assigned ({unassignedList.length})
+                                  </span>
+                                  <span style={{ fontSize: 9.5, opacity: 0.75, textTransform: 'none', fontWeight: 500 }}>
+                                    Click to assign
+                                  </span>
+                                </div>
+
+                                {unassignedList.length === 0 ? (
+                                  <div style={{
+                                    fontSize: 11,
+                                    color: 'hsl(var(--muted-foreground))',
+                                    fontStyle: 'italic',
+                                    padding: '7px 10px',
+                                    backgroundColor: 'hsl(var(--muted) / 0.25)',
+                                    borderRadius: 8,
+                                    border: '1px dashed hsl(var(--border) / 0.5)',
+                                    textAlign: 'center'
+                                  }}>
+                                    All members in this category are assigned.
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {unassignedList.map(m => renderAssigneeRow(m, false))}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </AvatarBorder>
-
-                          <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {displayName}
-                          </span>
-
-                          {/* Team Badge */}
-                          {badge && (
-                            <span style={{
-                              fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                              background: badge.bg, color: badge.color,
-                              display: 'inline-flex', alignItems: 'center'
-                            }}>
-                              <span>{badge.label}</span>
-                            </span>
-                          )}
-
-                          {isMemberOwner ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              <Crown size={10} /> Owner
-                            </span>
-                          ) : m.role === 'admin' ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'hsl(var(--primary) / 0.15)', color: 'hsl(var(--primary))', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              <Shield size={10} /> Admin
-                            </span>
-                          ) : m.role === 'observer' ? (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              <Eye size={10} /> Observer
-                            </span>
-                          ) : null}
-                          {isAssigned && <CheckSquare size={13} color="hsl(var(--primary))" />}
-                        </motion.button>
-                      );
-                    })
+                            </div>
+                          );
+                        })()
                       )}
                     </motion.div>
                   </AnimatePresence>

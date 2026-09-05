@@ -98,17 +98,23 @@ export default function App() {
       const searchParams = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       const errorDesc = searchParams.get('error_description') || hashParams.get('error_description') || searchParams.get('error') || hashParams.get('error');
+      const errorCode = searchParams.get('error_code') || hashParams.get('error_code');
 
       if (errorDesc) {
-        console.warn('[Supabase Auth] OAuth redirect error in URL:', errorDesc);
+        console.error('[Supabase Auth] OAuth redirect error in URL:', {
+          errorCode,
+          errorDesc,
+          search: window.location.search,
+          hash: window.location.hash
+        });
         // Clean URL to prevent infinite error loops on refresh
         window.history.replaceState({}, document.title, window.location.pathname);
         useToastStore.getState().showToast(
           errorDesc.includes('bad_oauth_state') || errorDesc.includes('expired')
-            ? 'Google Sign In was interrupted or expired. Please click Sign In with Google again.'
+            ? 'Google Sign In failed (bad_oauth_state). An ad-blocker may be blocking cookies, or check Supabase Redirect URLs.'
             : decodeURIComponent(errorDesc.replace(/\+/g, ' ')),
           'warning',
-          5000
+          7000
         );
       }
     } catch {}
